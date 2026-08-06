@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ "Редактировать запись" if entry else "Новая запись лорбука" }}</h1>
+<form method="post">
+    <div class="mb-3">
+        <label class="form-label">Название</label>
+        <input class="form-control" name="name" value="{{ entry.name if entry else '' }}" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Ключевые слова (через запятую)</label>
+        <input class="form-control" name="keywords" value="{{ entry.keywords|join(', ') if entry else '' }}">
+        <small class="text-muted">Если оставить пустым — запись будет вставляться в каждый запрос.</small>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Текст (вставляется в системный промпт при срабатывании)</label>
+        <textarea class="form-control" name="content" rows="8">{{ entry.content if entry else '' }}</textarea>
+    </div>
+    <div class="mb-3" style="max-width:200px">
+        <label class="form-label">Приоритет</label>
+        <input type="number" class="form-control" name="priority" value="{{ entry.priority if entry else 0 }}">
+        <small class="text-muted">Выше приоритет — раньше вставляется.</small>
+    </div>
+    <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="case_sensitive" id="cs"
+               {{ "checked" if entry and entry.case_sensitive else "" }}>
+        <label class="form-check-label" for="cs">Учитывать регистр букв</label>
+    </div>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="enabled" id="en"
+               {{ "checked" if not entry or entry.enabled else "" }}>
+        <label class="form-check-label" for="en">Включено</label>
+    </div>
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin.lorebooks_list') }}">Отмена</a>
+</form>
+{% endblock %}
