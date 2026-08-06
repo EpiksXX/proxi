@@ -1,7 +1,10 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-
 from config import APP_PORT
+from schemas import ChatRequest
+from gemini import generate
+import time
+import uuid
 
 app = Flask(__name__)
 CORS(app)
