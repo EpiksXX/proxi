@@ -1,4 +1,3 @@
-import os
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -6,18 +5,6 @@ from schemas import ChatRequest
 
 # Всегда используем только эту модель
 MODEL = "gemini-3-flash-preview"
-
-API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not API_KEY:
-    raise RuntimeError(
-        "Переменная окружения GEMINI_API_KEY не найдена."
-    )
-
-API_URL = (
-    f"https://generativelanguage.googleapis.com/v1beta/models/"
-    f"{MODEL}:generateContent?key={API_KEY}"
-)
 
 
 def convert_messages(chat: ChatRequest):
@@ -56,8 +43,14 @@ def convert_messages(chat: ChatRequest):
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
 )
-def generate(chat: ChatRequest):
+def generate(chat: ChatRequest, api_key: str):
+
+    api_url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{MODEL}:generateContent?key={api_key}"
+    )
 
     system_prompt, contents = convert_messages(chat)
 
@@ -86,7 +79,7 @@ def generate(chat: ChatRequest):
 
     try:
         response = requests.post(
-            API_URL,
+            api_url,
             json=payload,
             timeout=300,
         )
