@@ -59,12 +59,18 @@ def generate(chat: ChatRequest):
 
     system_prompt, contents = convert_messages(chat)
 
+    generation_config = {
+        "temperature": chat.temperature,
+        "topP": chat.top_p,
+        "maxOutputTokens": chat.max_tokens,
+    }
+
+    if chat.stop:
+        generation_config["stopSequences"] = chat.stop
+
     payload = {
         "contents": contents,
-        "generationConfig": {
-            "temperature": chat.temperature,
-            "maxOutputTokens": chat.max_tokens,
-        }
+        "generationConfig": generation_config
     }
 
     if system_prompt:
@@ -82,6 +88,16 @@ def generate(chat: ChatRequest):
         timeout=300,
     )
 
-    response.raise_for_status()
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Gemini API Error {response.status_code}: {response.text}"
+        )
 
-    return response.json()
+    data = response.json()
+
+    if "candidates" not in data:
+        raise RuntimeError(
+            f"Unexpected Gemini response:\n{data}"
+        )
+
+    return data
