@@ -1,10 +1,19 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
 from config import APP_PORT
 from schemas import ChatRequest
 from gemini import generate
+
+import logging
 import time
 import uuid
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -45,7 +54,14 @@ def chat_completions():
 
     try:
 
-        chat = ChatRequest.from_json(request.json)
+        chat = ChatRequest.from_json(request.get_json())
+
+        start = time.time()
+
+        logging.info("POST /v1/chat/completions")
+        logging.info(f"Messages: {len(chat.messages)}")
+        logging.info(f"Temperature: {chat.temperature}")
+        logging.info(f"Max tokens: {chat.max_tokens}")
 
         gemini_response = generate(chat)
 
@@ -54,58 +70,42 @@ def chat_completions():
         candidates = gemini_response.get("candidates", [])
 
         if candidates:
-
             content = candidates[0].get("content", {})
-
             parts = content.get("parts", [])
 
             for part in parts:
                 text += part.get("text", "")
 
+        elapsed = time.time() - start
+
+        logging.info(f"Completed in {elapsed:.2f}s")
+
         return jsonify({
-
             "id": f"chatcmpl-{uuid.uuid4().hex}",
-
             "object": "chat.completion",
-
             "created": int(time.time()),
-
             "model": "gemini-3-flash-preview",
-
             "choices": [
-
                 {
-
                     "index": 0,
-
                     "message": {
-
                         "role": "assistant",
-
                         "content": text
-
                     },
-
                     "finish_reason": "stop"
-
                 }
-
             ]
-
         })
 
     except Exception as e:
 
+        logging.exception("Gemini request failed")
+
         return jsonify({
-
             "error": {
-
                 "message": str(e),
-
                 "type": "server_error"
-
             }
-
         }), 500
 
 
