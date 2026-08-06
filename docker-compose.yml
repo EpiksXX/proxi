@@ -1,52 +1,40 @@
 version: "3.9"
-
 services:
   gemini-proxy:
     container_name: gemini-proxyyy
-
     build:
       context: .
       dockerfile: Dockerfile
-
     restart: unless-stopped
-
     ports:
       - "${HOST_PORT}:5000"
-
     env_file:
       - .env
-
     environment:
       APP_PORT: 5000
-
+    volumes:
+      - ./admin/data:/app/admin/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-
     logging:
       driver: json-file
       options:
         max-size: "20m"
         max-file: "5"
-
   ngrok:
     image: ngrok/ngrok:latest
     container_name: gemini-ngrok
-
     restart: unless-stopped
-
     depends_on:
       - gemini-proxy
-
     env_file:
       - .env
-
     command:
       - "http"
       - "gemini-proxy:5000"
-
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
