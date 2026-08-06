@@ -1,57 +1,22 @@
 {% extends "base.html" %}
-
 {% block content %}
-
-<div class="d-flex">
-
-    <div class="sidebar">
-
-        <h3>Gemini Proxy</h3>
-
-        <ul>
-
-            <li>📊 Dashboard</li>
-            <li>🤖 Proxy</li>
-            <li>🧩 Plugins</li>
-            <li>📚 Lorebooks</li>
-            <li>🧠 Memory</li>
-            <li>📄 Logs</li>
-            <li>⚙ Settings</li>
-
-        </ul>
-
+<h1>Dashboard</h1>
+<div class="cards">
+    <div class="card-box">
+        <h3>Status</h3>
+        <p>🟢 Online</p>
     </div>
-
-    <div class="content">
-
-        <h1>Dashboard</h1>
-
-        <div class="cards">
-
-            <div class="card-box">
-                <h3>Status</h3>
-                <p>🟢 Online</p>
-            </div>
-
-            <div class="card-box">
-                <h3>Model</h3>
-                <p>gemini-3-flash-preview</p>
-            </div>
-
-            <div class="card-box">
-                <h3>Requests</h3>
-                <p>0</p>
-            </div>
-
-            <div class="card-box">
-                <h3>Errors</h3>
-                <p>0</p>
-            </div>
-
-        </div>
-
+    <div class="card-box">
+        <h3>Model</h3>
+        <p>gemini-3-flash-preview</p>
     </div>
-
+    <div class="card-box">
+        <h3>Lorebooks</h3>
+        <p>{{ lorebooks_count }}</p>
+    </div>
+    <div class="card-box">
+        <h3>Plugins</h3>
+        <p>{{ plugins_count }}</p>
+    </div>
 </div>
-
 {% endblock %}
