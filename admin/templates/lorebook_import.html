@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Импорт лорбука из JSON</h1>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<p>Поддерживаются два формата файла:</p>
+<ul>
+    <li><strong>Экспорт SillyTavern / World Info</strong> — файл с полем <code>entries</code>
+        (например, лорбуки, скачанные с Chub, JanitorAI, LoreBary и т.д.)</li>
+    <li><strong>Собственный формат этой панели</strong> — список объектов с полями
+        <code>name</code>, <code>keywords</code>, <code>content</code></li>
+</ul>
+
+<form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+        <input class="form-control" type="file" name="file" accept=".json,application/json" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Импортировать</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin.lorebooks_list') }}">Отмена</a>
+</form>
+{% endblock %}
