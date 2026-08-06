@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ "Редактировать плагин" if plugin else "Новый плагин" }}</h1>
+<form method="post">
+    <div class="mb-3">
+        <label class="form-label">Название</label>
+        <input class="form-control" name="name" value="{{ plugin.name if plugin else '' }}" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Триггер</label>
+        <select class="form-select" name="trigger">
+            <option value="always" {{ "selected" if not plugin or plugin.trigger == "always" else "" }}>
+                Всегда
+            </option>
+            <option value="regex" {{ "selected" if plugin and plugin.trigger == "regex" else "" }}>
+                По regex-совпадению в последних сообщениях
+            </option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Regex-паттерн (только для триггера "regex")</label>
+        <input class="form-control" name="pattern" value="{{ plugin.pattern if plugin else '' }}"
+               placeholder="например: \bдракон\w*\b">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Позиция вставки текста</label>
+        <select class="form-select" name="position">
+            <option value="before" {{ "selected" if plugin and plugin.position == "before" else "" }}>
+                Перед системным промптом
+            </option>
+            <option value="after" {{ "selected" if not plugin or plugin.position == "after" else "" }}>
+                После системного промпта
+            </option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Текст плагина</label>
+        <textarea class="form-control" name="text" rows="8">{{ plugin.text if plugin else '' }}</textarea>
+    </div>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="enabled" id="en"
+               {{ "checked" if not plugin or plugin.enabled else "" }}>
+        <label class="form-check-label" for="en">Включено</label>
+    </div>
+    <button class="btn btn-primary" type="submit">Сохранить</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin.plugins_list') }}">Отмена</a>
+</form>
+{% endblock %}
