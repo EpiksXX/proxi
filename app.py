@@ -65,6 +65,12 @@ def chat_completions():
 
         gemini_response = generate(chat)
 
+        usage_metadata = gemini_response.get("usageMetadata", {})
+
+        prompt_tokens = usage_metadata.get("promptTokenCount", 0)
+        completion_tokens = usage_metadata.get("candidatesTokenCount", 0)
+        total_tokens = usage_metadata.get("totalTokenCount", 0)
+
         text = ""
 
         candidates = gemini_response.get("candidates", [])
@@ -79,12 +85,16 @@ def chat_completions():
         elapsed = time.time() - start
 
         logging.info(f"Completed in {elapsed:.2f}s")
+        logging.info(
+            f"Tokens: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}"
+        )
 
         return jsonify({
             "id": f"chatcmpl-{uuid.uuid4().hex}",
             "object": "chat.completion",
             "created": int(time.time()),
             "model": "gemini-3-flash-preview",
+
             "choices": [
                 {
                     "index": 0,
@@ -94,7 +104,13 @@ def chat_completions():
                     },
                     "finish_reason": "stop"
                 }
-            ]
+            ],
+
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens
+            }
         })
 
     except Exception as e:
