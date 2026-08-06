@@ -13,7 +13,9 @@ _lock = threading.Lock()
 def _ensure():
     os.makedirs(DATA_DIR, exist_ok=True)
     for path in (LOREBOOKS_FILE, PLUGINS_FILE):
-        if not os.path.exists(path):
+        # Создаём файл, если его нет ИЛИ если он существует, но пустой
+        # (например, из-за пустого volume/COPY на сервере).
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
             with open(path, "w", encoding="utf-8") as fp:
                 json.dump([], fp)
 
@@ -22,7 +24,20 @@ def _load(path):
     _ensure()
     with _lock:
         with open(path, "r", encoding="utf-8") as fp:
-            return json.load(fp)
+            raw = fp.read()
+
+    if not raw.strip():
+        # файл пустой/повреждён — не роняем приложение, восстанавливаем его
+        _save(path, [])
+        return []
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # файл содержит мусор — пересоздаём как пустой список,
+        # чтобы дашборд и роуты не падали с 500-й ошибкой
+        _save(path, [])
+        return []
 
 
 def _save(path, data):
