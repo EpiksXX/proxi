@@ -26,12 +26,12 @@ def convert_messages(chat: ChatRequest):
     """
 
     contents = []
-    system_prompt = None
+    system_messages = []
 
     for message in chat.messages:
 
         if message.role == "system":
-            system_prompt = message.content
+            system_messages.append(message.content)
             continue
 
         role = "user"
@@ -47,6 +47,8 @@ def convert_messages(chat: ChatRequest):
                 }
             ]
         })
+
+    system_prompt = "\n\n".join(system_messages)
 
     return system_prompt, contents
 
@@ -82,15 +84,36 @@ def generate(chat: ChatRequest):
             ]
         }
 
-    response = requests.post(
-        API_URL,
-        json=payload,
-        timeout=300,
-    )
+    try:
+        response = requests.post(
+            API_URL,
+            json=payload,
+            timeout=300,
+        )
+
+    except requests.exceptions.Timeout:
+        raise RuntimeError("Gemini API timeout")
+
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError("Cannot connect to Gemini API")
+
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Request failed: {e}")
+
+    if response.status_code == 429:
+        raise RuntimeError("Gemini rate limit exceeded")
+
+    if response.status_code == 503:
+        raise RuntimeError("Gemini service unavailable")
+
+    if response.status_code >= 500:
+        raise RuntimeError(
+            f"Gemini server error ({response.status_code})"
+        )
 
     if response.status_code != 200:
         raise RuntimeError(
-            f"Gemini API Error {response.status_code}: {response.text}"
+            f"Gemini returned {response.status_code}: {response.text}"
         )
 
     data = response.json()
