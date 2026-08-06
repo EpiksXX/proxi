@@ -2,7 +2,6 @@ import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 from schemas import ChatRequest
 from admin.lore_engine import build_augmented_system_prompt
-import logging
 
 # Всегда используем только эту модель
 MODEL = "gemini-3-flash-preview"
@@ -33,9 +32,6 @@ def convert_messages(chat: ChatRequest):
 
     # Подмешиваем сработавшие записи лорбука и включённые плагины
     system_prompt = build_augmented_system_prompt(system_prompt, chat.messages)
-
-    # ВРЕМЕННО для отладки — убери после проверки
-    logging.info(f"[DEBUG] Итоговый system_prompt:\n{system_prompt}")
 
     return system_prompt, contents
 
