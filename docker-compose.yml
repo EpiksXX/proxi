@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   gemini-proxy:
-    container_name: gemini-proxy
+    container_name: gemini-proxyyy
 
     build:
       context: .
