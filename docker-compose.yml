@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  gemini-proxy:
+    container_name: gemini-proxy
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    ports:
+      - "${HOST_PORT}:5000"
+
+    env_file:
+      - .env
+
+    environment:
+      APP_PORT: 5000
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
