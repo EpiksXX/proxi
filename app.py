@@ -47,8 +47,6 @@ def health():
     })
 
 
-# ---------- ВАЖНО ----------
-# JanitorAI иногда проверяет именно /v1
 @app.route("/v1", methods=["GET", "POST", "OPTIONS"])
 @app.route("/v1/", methods=["GET", "POST", "OPTIONS"])
 def api_root():
@@ -89,6 +87,26 @@ def chat_completions():
 
     try:
 
+        auth = request.headers.get("Authorization", "")
+
+        if not auth.startswith("Bearer "):
+            return jsonify({
+                "error": {
+                    "message": "Gemini API key is required.",
+                    "type": "authentication_error"
+                }
+            }), 401
+
+        api_key = auth[7:].strip()
+
+        if not api_key:
+            return jsonify({
+                "error": {
+                    "message": "Gemini API key is required.",
+                    "type": "authentication_error"
+                }
+            }), 401
+
         chat = ChatRequest.from_json(request.get_json())
 
         start = time.time()
@@ -98,7 +116,10 @@ def chat_completions():
         logging.info(f"Temperature: {chat.temperature}")
         logging.info(f"Max tokens: {chat.max_tokens}")
 
-        gemini_response = generate(chat)
+        # Показываем последние символы ключа в логах
+        logging.info(f"Using API key ending with: ...{api_key[-6:]}")
+
+        gemini_response = generate(chat, api_key)
 
         usage_metadata = gemini_response.get("usageMetadata", {})
 
@@ -129,7 +150,6 @@ def chat_completions():
             "object": "chat.completion",
             "created": int(time.time()),
             "model": "gemini-3-flash-preview",
-
             "choices": [
                 {
                     "index": 0,
@@ -140,7 +160,6 @@ def chat_completions():
                     "finish_reason": "stop"
                 }
             ],
-
             "usage": {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
