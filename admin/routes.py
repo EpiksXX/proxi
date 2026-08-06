@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, render_template, request, redirect, url_for
 
 from admin import storage
@@ -24,7 +26,87 @@ def dashboard():
 
 @admin.route("/lorebooks")
 def lorebooks_list():
-    return render_template("lorebooks.html", entries=storage.list_lorebooks())
+    return render_template(
+        "lorebooks.html",
+        entries=storage.list_lorebooks(),
+        imported=request.args.get("imported"),
+    )
+
+
+@admin.route("/lorebooks/import", methods=["GET", "POST"])
+def lorebooks_import():
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return render_template("lorebook_import.html", error="Файл не выбран.")
+
+        try:
+            raw = file.read().decode("utf-8")
+            data = json.loads(raw)
+        except UnicodeDecodeError:
+            return render_template("lorebook_import.html", error="Не удалось прочитать файл (неверная кодировка).")
+        except json.JSONDecodeError:
+            return render_template("lorebook_import.html", error="Файл не является корректным JSON.")
+
+        if isinstance(data, dict) and "entries" in data:
+            new_entries = _convert_sillytavern_lorebook(data)
+        elif isinstance(data, list):
+            new_entries = _convert_own_format_lorebook(data)
+        else:
+            return render_template(
+                "lorebook_import.html",
+                error="Формат файла не распознан. Ожидается экспорт SillyTavern/World Info "
+                      "(объект с полем 'entries') или список записей в формате этой панели.",
+            )
+
+        if not new_entries:
+            return render_template("lorebook_import.html", error="В файле не найдено ни одной записи.")
+
+        for entry in new_entries:
+            storage.save_lorebook(entry)
+
+        return redirect(url_for("admin.lorebooks_list", imported=len(new_entries)))
+
+    return render_template("lorebook_import.html", error=None)
+
+
+def _convert_sillytavern_lorebook(data):
+    """Конвертирует экспорт SillyTavern / World Info в формат этой панели."""
+    result = []
+    for entry in data.get("entries", {}).values():
+        enabled = not entry.get("disable", False)
+        # constant=true в SillyTavern значит "вставлять всегда" — у нас это
+        # соответствует пустому списку ключевых слов
+        keywords = [] if entry.get("constant") else list(entry.get("key", []))
+        name = entry.get("comment") or (keywords[0] if keywords else f"entry-{entry.get('uid', '')}")
+        result.append({
+            "id": None,
+            "name": name,
+            "keywords": keywords,
+            "content": entry.get("content", ""),
+            "priority": entry.get("order", 0),
+            "case_sensitive": False,
+            "enabled": enabled,
+        })
+    return result
+
+
+def _convert_own_format_lorebook(data):
+    """Принимает список записей уже в формате этой панели (например, экспортированный ранее)."""
+    result = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        result.append({
+            "id": None,  # всегда создаём как новую запись, чтобы не перезатереть существующую по id
+            "name": entry.get("name", "Без названия"),
+            "keywords": entry.get("keywords", []),
+            "content": entry.get("content", ""),
+            "priority": entry.get("priority", 0),
+            "case_sensitive": entry.get("case_sensitive", False),
+            "enabled": entry.get("enabled", True),
+        })
+    return result
 
 
 @admin.route("/lorebooks/new", methods=["GET", "POST"])
