@@ -5,6 +5,9 @@ from config import APP_PORT
 from schemas import ChatRequest
 from gemini import generate
 
+# Админ-панель
+from admin.routes import admin
+
 import logging
 import time
 import uuid
@@ -22,6 +25,9 @@ CORS(
     resources={r"/*": {"origins": "*"}},
     supports_credentials=True
 )
+
+# Регистрируем Blueprint админ-панели
+app.register_blueprint(admin)
 
 
 @app.after_request
@@ -115,8 +121,6 @@ def chat_completions():
         logging.info(f"Messages: {len(chat.messages)}")
         logging.info(f"Temperature: {chat.temperature}")
         logging.info(f"Max tokens: {chat.max_tokens}")
-
-        # Показываем последние символы ключа в логах
         logging.info(f"Using API key ending with: ...{api_key[-6:]}")
 
         gemini_response = generate(chat, api_key)
