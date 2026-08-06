@@ -42,12 +42,71 @@ def models():
 
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
-    return jsonify({
-        "error": {
-            "message": "Gemini module not implemented yet.",
-            "type": "server_error"
-        }
-    }), 501
+
+    try:
+
+        chat = ChatRequest.from_json(request.json)
+
+        gemini_response = generate(chat)
+
+        text = ""
+
+        candidates = gemini_response.get("candidates", [])
+
+        if candidates:
+
+            content = candidates[0].get("content", {})
+
+            parts = content.get("parts", [])
+
+            for part in parts:
+                text += part.get("text", "")
+
+        return jsonify({
+
+            "id": f"chatcmpl-{uuid.uuid4().hex}",
+
+            "object": "chat.completion",
+
+            "created": int(time.time()),
+
+            "model": "gemini-3-flash-preview",
+
+            "choices": [
+
+                {
+
+                    "index": 0,
+
+                    "message": {
+
+                        "role": "assistant",
+
+                        "content": text
+
+                    },
+
+                    "finish_reason": "stop"
+
+                }
+
+            ]
+
+        })
+
+    except Exception as e:
+
+        return jsonify({
+
+            "error": {
+
+                "message": str(e),
+
+                "type": "server_error"
+
+            }
+
+        }), 500
 
 
 if __name__ == "__main__":
