@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1>Lorebooks</h1>
+    <a class="btn btn-primary" href="{{ url_for('admin.lorebooks_new') }}">+ Новая запись</a>
+</div>
+<table class="table table-dark table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Название</th>
+            <th>Ключевые слова</th>
+            <th>Приоритет</th>
+            <th>Статус</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for e in entries %}
+        <tr>
+            <td>{{ e.name }}</td>
+            <td>{{ e.keywords|join(", ") if e.keywords else "— (всегда)" }}</td>
+            <td>{{ e.priority }}</td>
+            <td>{{ "🟢 включено" if e.enabled else "⚪ выключено" }}</td>
+            <td class="text-nowrap">
+                <a href="{{ url_for('admin.lorebooks_edit', entry_id=e.id) }}" title="Редактировать">✏️</a>
+                <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_toggle', entry_id=e.id) }}">
+                    <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
+                </form>
+                <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_delete', entry_id=e.id) }}"
+                      onsubmit="return confirm('Удалить запись «{{ e.name }}»?');">
+                    <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="5">Пока нет записей</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
