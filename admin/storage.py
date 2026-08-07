@@ -81,6 +81,25 @@ def toggle_lorebook(entry_id):
     _save(LOREBOOKS_FILE, entries)
 
 
+def list_lorebook_sources():
+    """Возвращает отсортированный список уникальных источников (названий лорбуков)."""
+    sources = {e.get("source", "Без источника") for e in list_lorebooks()}
+    return sorted(sources)
+
+
+def delete_lorebooks_by_source(source):
+    entries = [e for e in list_lorebooks() if e.get("source", "Без источника") != source]
+    _save(LOREBOOKS_FILE, entries)
+
+
+def set_enabled_by_source(source, enabled):
+    entries = list_lorebooks()
+    for e in entries:
+        if e.get("source", "Без источника") == source:
+            e["enabled"] = enabled
+    _save(LOREBOOKS_FILE, entries)
+
+
 # ---------------- Plugins ----------------
 
 def list_plugins():
