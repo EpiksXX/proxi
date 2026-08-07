@@ -12,85 +12,75 @@
     </div>
 </div>
 
-<form method="get" class="d-flex align-items-center mb-3" style="gap:10px">
-    <label class="form-label mb-0">Источник:</label>
-    <select class="form-select" name="source" style="max-width:420px" onchange="this.form.submit()">
-        <option value="">— Все ({{ sources|length }} источников) —</option>
-        {% for s in sources %}
-        <option value="{{ s }}" {{ "selected" if s == selected_source else "" }}>
-            {{ s }} — {{ source_codes[s] }}
-        </option>
-        {% endfor %}
-    </select>
-</form>
+{% for group in groups %}
+<details class="lore-folder" {{ "open" if group.source == open_source else "" }}>
+    <summary>
+        <span class="lore-folder-title">📁 {{ group.source }}</span>
+        <span class="lore-folder-meta">
+            <span class="text-muted">{{ group.total }} записей · включено {{ group.enabled_count }}</span>
+            <code>&lt;LOREBOOK={{ group.code }}&gt;</code>
+        </span>
+    </summary>
 
-{% if selected_source %}
-<div class="card-box mb-3">
-    <h3 style="margin-top:0">Подключить через тег</h3>
-    <p class="text-muted" style="margin-bottom:8px">
-        Вставь этот код в системный промпт / character card в JanitorAI (или другой платформе) —
-        прокси сам найдёт и подставит нужные записи «{{ selected_source }}»:
-    </p>
-    <code style="font-size:1.1rem">&lt;LOREBOOK={{ selected_source_code }}&gt;</code>
-    <p class="text-muted" style="margin-top:10px;margin-bottom:0">
-        По умолчанию сканируются последние {{ 2 }} сообщения. Чтобы сканировать больше —
-        укажи глубину через слэш, например:
-        <code>&lt;LOREBOOK={{ selected_source_code }}/5&gt;</code> — последние 5 сообщений.
-    </p>
-</div>
+    <div class="lore-folder-body">
+        <p class="text-muted" style="margin-bottom:14px">
+            Вставь этот код в системный промпт / character card, чтобы подключить книгу:
+            <code>&lt;LOREBOOK={{ group.code }}&gt;</code> — по умолчанию сканируются последние 2 сообщения,
+            или укажи глубину явно: <code>&lt;LOREBOOK={{ group.code }}/5&gt;</code>.
+        </p>
 
-<div class="mb-3 d-flex" style="gap:8px">
-    <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
-        <input type="hidden" name="source" value="{{ selected_source }}">
-        <input type="hidden" name="enabled" value="1">
-        <button type="submit" class="btn btn-outline-light btn-sm">🟢 Включить все из «{{ selected_source }}»</button>
-    </form>
-    <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
-        <input type="hidden" name="source" value="{{ selected_source }}">
-        <input type="hidden" name="enabled" value="0">
-        <button type="submit" class="btn btn-outline-light btn-sm">⚪ Выключить все из «{{ selected_source }}»</button>
-    </form>
-    <form method="post" action="{{ url_for('admin.lorebooks_bulk_delete') }}"
-          onsubmit="return confirm('Удалить ВСЕ записи источника «{{ selected_source }}»? Это необратимо.');">
-        <input type="hidden" name="source" value="{{ selected_source }}">
-        <button type="submit" class="btn btn-outline-danger btn-sm">🗑️ Удалить все из «{{ selected_source }}»</button>
-    </form>
-</div>
-{% endif %}
+        <div class="mb-3 d-flex" style="gap:8px">
+            <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <input type="hidden" name="enabled" value="1">
+                <button type="submit" class="btn btn-outline-light btn-sm">🟢 Включить все</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <input type="hidden" name="enabled" value="0">
+                <button type="submit" class="btn btn-outline-light btn-sm">⚪ Выключить все</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.lorebooks_bulk_delete') }}"
+                  onsubmit="return confirm('Удалить ВСЕ записи источника «{{ group.source }}»? Это необратимо.');">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">🗑️ Удалить все</button>
+            </form>
+        </div>
 
-<table class="table table-dark table-hover align-middle">
-    <thead>
-        <tr>
-            <th>Название</th>
-            <th>Ключевые слова</th>
-            <th>Источник</th>
-            <th>Приоритет</th>
-            <th>Статус</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for e in entries %}
-        <tr>
-            <td>{{ e.name }}</td>
-            <td>{{ e.keywords|join(", ") if e.keywords else "— (всегда)" }}</td>
-            <td><small class="text-muted">{{ e.source or "—" }}</small></td>
-            <td>{{ e.priority }}</td>
-            <td>{{ "🟢 включено" if e.enabled else "⚪ выключено" }}</td>
-            <td class="text-nowrap">
-                <a href="{{ url_for('admin.lorebooks_edit', entry_id=e.id) }}" title="Редактировать">✏️</a>
-                <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_toggle', entry_id=e.id) }}">
-                    <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
-                </form>
-                <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_delete', entry_id=e.id) }}"
-                      onsubmit="return confirm('Удалить запись «{{ e.name }}»?');">
-                    <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
-                </form>
-            </td>
-        </tr>
-    {% else %}
-        <tr><td colspan="6">Пока нет записей</td></tr>
-    {% endfor %}
-    </tbody>
-</table>
+        <table class="table table-dark table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Ключевые слова</th>
+                    <th>Приоритет</th>
+                    <th>Статус</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for e in group.entries %}
+                <tr>
+                    <td>{{ e.name }}</td>
+                    <td>{{ e.keywords|join(", ") if e.keywords else "— (всегда)" }}</td>
+                    <td>{{ e.priority }}</td>
+                    <td>{{ "🟢 включено" if e.enabled else "⚪ выключено" }}</td>
+                    <td class="text-nowrap">
+                        <a href="{{ url_for('admin.lorebooks_edit', entry_id=e.id) }}" title="Редактировать">✏️</a>
+                        <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_toggle', entry_id=e.id) }}">
+                            <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
+                        </form>
+                        <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_delete', entry_id=e.id) }}"
+                              onsubmit="return confirm('Удалить запись «{{ e.name }}»?');">
+                            <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% else %}
+<p class="text-muted">Пока нет записей</p>
+{% endfor %}
 {% endblock %}
