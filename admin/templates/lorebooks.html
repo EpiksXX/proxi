@@ -3,6 +3,7 @@
 {% if imported %}
 <div class="alert alert-success">Импортировано записей: {{ imported }}</div>
 {% endif %}
+
 <div class="page-header">
     <h1>Lorebooks</h1>
     <div>
@@ -10,11 +11,43 @@
         <a class="btn btn-primary" href="{{ url_for('admin.lorebooks_new') }}">+ Новая запись</a>
     </div>
 </div>
+
+<form method="get" class="d-flex align-items-center mb-3" style="gap:10px">
+    <label class="form-label mb-0">Источник:</label>
+    <select class="form-select" name="source" style="max-width:320px" onchange="this.form.submit()">
+        <option value="">— Все ({{ sources|length }} источников) —</option>
+        {% for s in sources %}
+        <option value="{{ s }}" {{ "selected" if s == selected_source else "" }}>{{ s }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+{% if selected_source %}
+<div class="mb-3 d-flex" style="gap:8px">
+    <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
+        <input type="hidden" name="source" value="{{ selected_source }}">
+        <input type="hidden" name="enabled" value="1">
+        <button type="submit" class="btn btn-outline-light btn-sm">🟢 Включить все из «{{ selected_source }}»</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
+        <input type="hidden" name="source" value="{{ selected_source }}">
+        <input type="hidden" name="enabled" value="0">
+        <button type="submit" class="btn btn-outline-light btn-sm">⚪ Выключить все из «{{ selected_source }}»</button>
+    </form>
+    <form method="post" action="{{ url_for('admin.lorebooks_bulk_delete') }}"
+          onsubmit="return confirm('Удалить ВСЕ записи источника «{{ selected_source }}»? Это необратимо.');">
+        <input type="hidden" name="source" value="{{ selected_source }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">🗑️ Удалить все из «{{ selected_source }}»</button>
+    </form>
+</div>
+{% endif %}
+
 <table class="table table-dark table-hover align-middle">
     <thead>
         <tr>
             <th>Название</th>
             <th>Ключевые слова</th>
+            <th>Источник</th>
             <th>Приоритет</th>
             <th>Статус</th>
             <th></th>
@@ -25,6 +58,7 @@
         <tr>
             <td>{{ e.name }}</td>
             <td>{{ e.keywords|join(", ") if e.keywords else "— (всегда)" }}</td>
+            <td><small class="text-muted">{{ e.source or "—" }}</small></td>
             <td>{{ e.priority }}</td>
             <td>{{ "🟢 включено" if e.enabled else "⚪ выключено" }}</td>
             <td class="text-nowrap">
@@ -39,7 +73,7 @@
             </td>
         </tr>
     {% else %}
-        <tr><td colspan="5">Пока нет записей</td></tr>
+        <tr><td colspan="6">Пока нет записей</td></tr>
     {% endfor %}
     </tbody>
 </table>
