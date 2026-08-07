@@ -86,3 +86,53 @@ form textarea:focus, form input:focus, form select:focus{
     background:#1f2937;
     color:white;
 }
+
+/* --- Lorebook folders (collapsible groups by source) --- */
+details.lore-folder{
+    background:#1f2937;
+    border-radius:12px;
+    margin-bottom:12px;
+    overflow:hidden;
+}
+details.lore-folder > summary{
+    cursor:pointer;
+    padding:16px 22px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    flex-wrap:wrap;
+    list-style:none;
+    font-size:1.05rem;
+}
+details.lore-folder > summary::-webkit-details-marker{
+    display:none;
+}
+details.lore-folder > summary::before{
+    content:"▶";
+    display:inline-block;
+    margin-right:10px;
+    font-size:0.75rem;
+    transition:transform 0.15s ease;
+    color:#9ca3af;
+}
+details.lore-folder[open] > summary::before{
+    transform:rotate(90deg);
+}
+details.lore-folder > summary:hover{
+    background:#374151;
+}
+.lore-folder-title{
+    font-weight:bold;
+}
+.lore-folder-meta{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    font-size:0.9rem;
+}
+.lore-folder-body{
+    padding:0 22px 22px 22px;
+    border-top:1px solid #374151;
+    padding-top:18px;
+}
