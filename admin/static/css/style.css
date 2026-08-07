@@ -3,6 +3,22 @@ body{
     background:#111827;
     color:white;
     font-family:Arial,sans-serif;
+    /* Bootstrap читает эти переменные почти для всего текста и <code> —
+       без переопределения он подставляет свои (тёмно-серый текст, розовый code),
+       рассчитанные на светлую тему, и на нашем тёмном фоне их почти не видно
+       либо они режут глаз (розовый). */
+    --bs-body-color: #e5e7eb;
+    --bs-body-color-rgb: 229, 231, 235;
+    --bs-secondary-color: #9ca3af;
+    --bs-code-color: #7dd3fc;
+    --bs-heading-color: #ffffff;
+    --bs-link-color: #7dd3fc;
+    --bs-link-hover-color: #93c5fd;
+}
+code{
+    background:#0f172a;
+    padding:2px 6px;
+    border-radius:4px;
 }
 .d-flex{
     display:flex;
