@@ -27,21 +27,29 @@ def dashboard():
 
 @admin.route("/lorebooks")
 def lorebooks_list():
-    source_filter = request.args.get("source", "")
     entries = storage.list_lorebooks()
-    if source_filter:
-        entries = [e for e in entries if e.get("source", "Без источника") == source_filter]
 
-    sources = storage.list_lorebook_sources()
+    groups_map = {}
+    for e in entries:
+        src = e.get("source") or "Без источника"
+        groups_map.setdefault(src, []).append(e)
+
+    groups = []
+    for src in sorted(groups_map.keys(), key=lambda s: s.lower()):
+        group_entries = groups_map[src]
+        groups.append({
+            "source": src,
+            "code": source_code(src),
+            "entries": group_entries,
+            "total": len(group_entries),
+            "enabled_count": sum(1 for e in group_entries if e.get("enabled", True)),
+        })
 
     return render_template(
         "lorebooks.html",
-        entries=entries,
+        groups=groups,
         imported=request.args.get("imported"),
-        sources=sources,
-        source_codes={s: source_code(s) for s in sources},
-        selected_source=source_filter,
-        selected_source_code=source_code(source_filter) if source_filter else None,
+        open_source=request.args.get("open", ""),
     )
 
 
@@ -59,7 +67,7 @@ def lorebooks_bulk_toggle():
     enabled = request.form.get("enabled") == "1"
     if source:
         storage.set_enabled_by_source(source, enabled)
-    return redirect(url_for("admin.lorebooks_list", source=source))
+    return redirect(url_for("admin.lorebooks_list", open=source))
 
 
 @admin.route("/lorebooks/import", methods=["GET", "POST"])
@@ -167,14 +175,18 @@ def lorebooks_edit(entry_id):
 
 @admin.route("/lorebooks/<entry_id>/delete", methods=["POST"])
 def lorebooks_delete(entry_id):
+    entry = storage.get_lorebook(entry_id)
+    source = entry.get("source", "") if entry else ""
     storage.delete_lorebook(entry_id)
-    return redirect(url_for("admin.lorebooks_list"))
+    return redirect(url_for("admin.lorebooks_list", open=source))
 
 
 @admin.route("/lorebooks/<entry_id>/toggle", methods=["POST"])
 def lorebooks_toggle(entry_id):
+    entry = storage.get_lorebook(entry_id)
+    source = entry.get("source", "") if entry else ""
     storage.toggle_lorebook(entry_id)
-    return redirect(url_for("admin.lorebooks_list"))
+    return redirect(url_for("admin.lorebooks_list", open=source))
 
 
 def _entry_from_form(form, entry_id=None):
