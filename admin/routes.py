@@ -3,6 +3,7 @@ import json
 from flask import Blueprint, render_template, request, redirect, url_for
 
 from admin import storage
+from admin.lore_engine import source_code
 
 admin = Blueprint(
     "admin",
@@ -31,12 +32,16 @@ def lorebooks_list():
     if source_filter:
         entries = [e for e in entries if e.get("source", "Без источника") == source_filter]
 
+    sources = storage.list_lorebook_sources()
+
     return render_template(
         "lorebooks.html",
         entries=entries,
         imported=request.args.get("imported"),
-        sources=storage.list_lorebook_sources(),
+        sources=sources,
+        source_codes={s: source_code(s) for s in sources},
         selected_source=source_filter,
+        selected_source_code=source_code(source_filter) if source_filter else None,
     )
 
 
