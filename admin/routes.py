@@ -26,11 +26,35 @@ def dashboard():
 
 @admin.route("/lorebooks")
 def lorebooks_list():
+    source_filter = request.args.get("source", "")
+    entries = storage.list_lorebooks()
+    if source_filter:
+        entries = [e for e in entries if e.get("source", "Без источника") == source_filter]
+
     return render_template(
         "lorebooks.html",
-        entries=storage.list_lorebooks(),
+        entries=entries,
         imported=request.args.get("imported"),
+        sources=storage.list_lorebook_sources(),
+        selected_source=source_filter,
     )
+
+
+@admin.route("/lorebooks/bulk-delete", methods=["POST"])
+def lorebooks_bulk_delete():
+    source = request.form.get("source", "")
+    if source:
+        storage.delete_lorebooks_by_source(source)
+    return redirect(url_for("admin.lorebooks_list"))
+
+
+@admin.route("/lorebooks/bulk-toggle", methods=["POST"])
+def lorebooks_bulk_toggle():
+    source = request.form.get("source", "")
+    enabled = request.form.get("enabled") == "1"
+    if source:
+        storage.set_enabled_by_source(source, enabled)
+    return redirect(url_for("admin.lorebooks_list", source=source))
 
 
 @admin.route("/lorebooks/import", methods=["GET", "POST"])
@@ -49,9 +73,11 @@ def lorebooks_import():
             return render_template("lorebook_import.html", error="Файл не является корректным JSON.")
 
         if isinstance(data, dict) and "entries" in data:
-            new_entries = _convert_sillytavern_lorebook(data)
+            source_name = data.get("name") or file.filename
+            new_entries = _convert_sillytavern_lorebook(data, source_name)
         elif isinstance(data, list):
-            new_entries = _convert_own_format_lorebook(data)
+            source_name = file.filename
+            new_entries = _convert_own_format_lorebook(data, source_name)
         else:
             return render_template(
                 "lorebook_import.html",
@@ -70,7 +96,7 @@ def lorebooks_import():
     return render_template("lorebook_import.html", error=None)
 
 
-def _convert_sillytavern_lorebook(data):
+def _convert_sillytavern_lorebook(data, source_name="Импортированный лорбук"):
     """Конвертирует экспорт SillyTavern / World Info в формат этой панели."""
     result = []
     for entry in data.get("entries", {}).values():
@@ -87,11 +113,12 @@ def _convert_sillytavern_lorebook(data):
             "priority": entry.get("order", 0),
             "case_sensitive": False,
             "enabled": enabled,
+            "source": source_name,
         })
     return result
 
 
-def _convert_own_format_lorebook(data):
+def _convert_own_format_lorebook(data, source_name="Импортированный лорбук"):
     """Принимает список записей уже в формате этой панели (например, экспортированный ранее)."""
     result = []
     for entry in data:
@@ -105,6 +132,7 @@ def _convert_own_format_lorebook(data):
             "priority": entry.get("priority", 0),
             "case_sensitive": entry.get("case_sensitive", False),
             "enabled": entry.get("enabled", True),
+            "source": entry.get("source") or source_name,
         })
     return result
 
@@ -113,6 +141,7 @@ def _convert_own_format_lorebook(data):
 def lorebooks_new():
     if request.method == "POST":
         entry = _entry_from_form(request.form)
+        entry["source"] = "Добавлено вручную"
         storage.save_lorebook(entry)
         return redirect(url_for("admin.lorebooks_list"))
     return render_template("lorebook_edit.html", entry=None)
@@ -120,12 +149,15 @@ def lorebooks_new():
 
 @admin.route("/lorebooks/<entry_id>/edit", methods=["GET", "POST"])
 def lorebooks_edit(entry_id):
-    entry = storage.get_lorebook(entry_id)
+    existing = storage.get_lorebook(entry_id)
     if request.method == "POST":
         entry = _entry_from_form(request.form, entry_id=entry_id)
+        # сохраняем исходный source (например, название импортированного лорбука),
+        # чтобы редактирование одной записи не выбрасывало её из фильтра/группы
+        entry["source"] = existing.get("source", "Добавлено вручную") if existing else "Добавлено вручную"
         storage.save_lorebook(entry)
         return redirect(url_for("admin.lorebooks_list"))
-    return render_template("lorebook_edit.html", entry=entry)
+    return render_template("lorebook_edit.html", entry=existing)
 
 
 @admin.route("/lorebooks/<entry_id>/delete", methods=["POST"])
