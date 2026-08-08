@@ -1,4 +1,5 @@
 import hashlib
+import random
 import re
 
 from admin import storage
@@ -6,18 +7,17 @@ from admin import storage
 # Теги, которые можно вставить прямо в системный промпт / character card:
 #   <LOREBOOK=A1B2C3D4>       — подставить книгу знаний по коду (глубина сканирования по умолчанию)
 #   <LOREBOOK=A1B2C3D4/5>     — то же самое, но сканировать последние 5 сообщений вместо дефолта
-#   <PLUGIN=a1b2c3d4>         — подставить текст плагина по его id
+#   <PLUGIN=A1B2C3D4>         — подставить набор плагинов по коду источника
 LOREBOOK_TAG_PATTERN = re.compile(r"<LOREBOOK=([0-9A-Fa-f]{6,10})(?:/(\d+))?>")
-PLUGIN_TAG_PATTERN = re.compile(r"<PLUGIN=([0-9A-Fa-f]{6,10})(?:/(\d+))?>")
+PLUGIN_TAG_PATTERN = re.compile(r"<PLUGIN=([0-9A-Fa-f]{6,10})>")
 
 DEFAULT_TAG_DEPTH = 2  # как в LoreBary: по умолчанию сканируются последние 2 сообщения
 
 
 def source_code(source_name):
     """
-    Детерминированный короткий код для источника (названия лорбука).
-    Ничего не хранится отдельно — код всегда одинаковый для одного и того же названия,
-    поэтому его достаточно один раз посчитать и показать в панели.
+    Детерминированный короткий код для источника (названия лорбука/набора плагинов).
+    Ничего не хранится отдельно — код всегда одинаковый для одного и того же названия.
     """
     source_name = source_name or "Без источника"
     return hashlib.md5(source_name.encode("utf-8")).hexdigest()[:8].upper()
@@ -33,7 +33,7 @@ def _recent_text(messages, window=6):
     return " ".join(chunks)
 
 
-def _keyword_matches(text, keywords, case_sensitive):
+def _keyword_matches(text, keywords, case_sensitive=False):
     haystack = text if case_sensitive else text.lower()
     for kw in keywords:
         needle = kw if case_sensitive else kw.lower()
@@ -59,24 +59,8 @@ def _match_entries(entries, text, max_entries):
     return "\n\n".join(e["content"] for e in matched if e.get("content"))
 
 
-def build_lore_context(messages, max_entries=10, exclude_codes=None):
-    """
-    Автоматический скан (без явного тега): проходит по всем включённым записям,
-    ИСКЛЮЧАЯ те источники, что уже были явно вызваны через <LOREBOOK=КОД> в этом промпте
-    (чтобы не подставлять один и тот же контент дважды).
-    """
-    exclude_codes = exclude_codes or set()
-    text = _recent_text(messages)
-
-    entries = [
-        e for e in storage.list_lorebooks()
-        if source_code(e.get("source", "Без источника")) not in exclude_codes
-    ]
-    return _match_entries(entries, text, max_entries)
-
-
 def build_lore_context_by_code(code, messages, window=DEFAULT_TAG_DEPTH, max_entries=20):
-    """Скан только среди записей конкретного источника (найденного по коду из тега)."""
+    """Скан только среди записей конкретного источника лорбука (найденного по коду из тега)."""
     text = _recent_text(messages, window=window)
     entries = [
         e for e in storage.list_lorebooks()
@@ -85,77 +69,101 @@ def build_lore_context_by_code(code, messages, window=DEFAULT_TAG_DEPTH, max_ent
     return _match_entries(entries, text, max_entries)
 
 
-def apply_plugins(system_prompt, messages, exclude_ids=None):
+# ---------------- Плагины ----------------
+
+def _pool_pick(pool):
+    """Случайно выбирает один вариант текста из пула (как chance-пул в LoreBary)."""
+    pool = [p for p in (pool or []) if p]
+    if not pool:
+        return ""
+    return random.choice(pool)
+
+
+def _plugin_entry_triggers(entry, text, msg_count):
     """
-    Прогоняет включённые плагины, ИСКЛЮЧАЯ те, что уже были явно вызваны
-    через <PLUGIN=ID> в этом промпте.
+    Проверяет, должно ли конкретное правило плагина сработать в этом запросе.
+    Поддерживаемые типы триггера:
+      - always     — срабатывает всегда
+      - keyword    — срабатывает, если в последних сообщениях есть одно из ключевых слов
+      - regex      — срабатывает по регулярному выражению (продвинутый вариант keyword)
+      - interval   — срабатывает каждые N сообщений, начиная с start_after
     """
-    exclude_ids = exclude_ids or set()
+    trigger = entry.get("trigger", "always")
+
+    if trigger == "always":
+        return True
+
+    if trigger == "keyword":
+        keywords = entry.get("keywords", [])
+        return bool(keywords) and _keyword_matches(text, keywords, entry.get("case_sensitive", False))
+
+    if trigger == "regex":
+        pattern = entry.get("pattern", "")
+        if not pattern:
+            return False
+        try:
+            return bool(re.search(pattern, text, re.IGNORECASE))
+        except re.error:
+            return False
+
+    if trigger == "interval":
+        interval = int(entry.get("interval") or 0)
+        if interval <= 0:
+            return False
+        start_after = int(entry.get("start_after") or interval)
+        if msg_count < start_after:
+            return False
+        return (msg_count - start_after) % interval == 0
+
+    return False
+
+
+def build_plugin_text_by_code(code, messages):
+    """
+    Собирает текст всех сработавших в этом запросе правил плагина
+    из набора, найденного по коду источника.
+    """
     text = _recent_text(messages)
+    msg_count = len(messages)
+    code = code.upper()
 
-    for plugin in storage.list_plugins():
-        if plugin.get("id") in exclude_ids:
+    parts = []
+    for entry in storage.list_plugins():
+        if not entry.get("enabled", True):
             continue
-        if not plugin.get("enabled", True):
+        if source_code(entry.get("source", "Без источника")) != code:
             continue
-
-        trigger = plugin.get("trigger", "always")
-        if trigger == "regex":
-            pattern = plugin.get("pattern", "")
-            if not pattern:
-                continue
-            try:
-                if not re.search(pattern, text, re.IGNORECASE):
-                    continue
-            except re.error:
-                continue
-
-        plugin_text = plugin.get("text", "")
-        if not plugin_text:
+        if not _plugin_entry_triggers(entry, text, msg_count):
             continue
 
-        if plugin.get("position", "after") == "before":
-            system_prompt = f"{plugin_text}\n\n{system_prompt}" if system_prompt else plugin_text
-        else:
-            system_prompt = f"{system_prompt}\n\n{plugin_text}" if system_prompt else plugin_text
+        chosen = _pool_pick(entry.get("pool", []))
+        if chosen:
+            parts.append(chosen)
 
-    return system_prompt
+    return "\n\n".join(parts)
 
 
 def build_augmented_system_prompt(base_system_prompt, messages):
     """
-    Главная точка входа. Лорбуки работают ТОЛЬКО по явному тегу:
-      <LOREBOOK=КОД>            — подставить книгу по коду (глубина сканирования по умолчанию)
-      <LOREBOOK=КОД/ГЛУБИНА>    — то же самое, но сканировать последние N сообщений
+    Главная точка входа. И лорбуки, и плагины работают ТОЛЬКО по явному тегу:
+      <LOREBOOK=КОД>          — подставить книгу по коду (глубина сканирования по умолчанию)
+      <LOREBOOK=КОД/ГЛУБИНА>  — то же самое, но сканировать последние N сообщений
+      <PLUGIN=КОД>            — подставить сработавшие в этом запросе правила плагина по коду
 
-    Без тега книга НИКОГДА не подставляется — сколько бы записей ни было загружено,
+    Без тега ничего НЕ подставляется — сколько бы книг/плагинов ни было загружено,
     они не влияют на промпт, пока их источник явно не вызван по коду.
-
-    Плагины по-прежнему работают либо через явный тег <PLUGIN=ID>, либо автоматически
-    (always / regex), если тег не использован — это не меняли, скажи, если тоже
-    нужно перевести только на теги.
     """
     prompt = base_system_prompt or ""
 
-    # --- Явные теги лорбука (единственный способ подключить книгу) ---
-    tagged_codes = set()
     for m in LOREBOOK_TAG_PATTERN.finditer(prompt):
         code = m.group(1).upper()
         depth = int(m.group(2)) if m.group(2) else DEFAULT_TAG_DEPTH
-        tagged_codes.add(code)
         lore_text = build_lore_context_by_code(code, messages, window=depth)
         prompt = prompt.replace(m.group(0), lore_text, 1)
 
-    # --- Явные теги плагинов ---
-    tagged_plugin_ids = set()
     for m in PLUGIN_TAG_PATTERN.finditer(prompt):
-        plugin_id = m.group(1).lower()
-        tagged_plugin_ids.add(plugin_id)
-        plugin = storage.get_plugin(plugin_id)
-        text = plugin.get("text", "") if plugin and plugin.get("enabled", True) else ""
-        prompt = prompt.replace(m.group(0), text, 1)
-
-    # --- Остальные включённые плагины (без явного тега) — оставлено как было ---
-    prompt = apply_plugins(prompt, messages, exclude_ids=tagged_plugin_ids)
+        code = m.group(1)
+        plugin_text = build_plugin_text_by_code(code, messages)
+        prompt = prompt.replace(m.group(0), plugin_text, 1)
 
     return prompt
