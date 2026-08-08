@@ -1,0 +1,39 @@
+{% extends "rp_base.html" %}
+{% block title %}Новая RP-комната{% endblock %}
+{% block content %}
+<div class="rp-card">
+    <h1>Новая RP-комната</h1>
+    <p class="text-muted">Создай общий чат — после этого получишь ссылку, которой можно поделиться с друзьями.</p>
+
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Имя персонажа</label>
+            <input class="form-control" name="character_name" placeholder="Например: Куро" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Системный промпт / персона персонажа</label>
+            <textarea class="form-control" name="system_prompt" rows="6"
+                placeholder="Опиши персонажа, сеттинг и т.д. Можно вставить теги &lt;LOREBOOK=КОД&gt; и &lt;PLUGIN=КОД&gt; из твоей админ-панели — они будут работать и здесь."></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Gemini API-ключ</label>
+            <input class="form-control" name="api_key" placeholder="Оставь пустым, чтобы использовать ключ из .env сервера (GEMINI_API_KEY)">
+        </div>
+
+        <div class="mb-3 d-flex" style="gap:16px">
+            <div style="max-width:200px">
+                <label class="form-label">Temperature</label>
+                <input class="form-control" name="temperature" type="number" step="0.1" value="1.0">
+            </div>
+            <div style="max-width:200px">
+                <label class="form-label">Max tokens</label>
+                <input class="form-control" name="max_tokens" type="number" value="2000">
+            </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Создать комнату</button>
+    </form>
+</div>
+{% endblock %}
