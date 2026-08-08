@@ -1,0 +1,137 @@
+{% extends "rp_base.html" %}
+{% block title %}{{ room.character_name }}{% endblock %}
+{% block content %}
+<div class="rp-card">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h1 style="margin-bottom:4px">{{ room.character_name }}</h1>
+            <div class="text-muted">Ты: <strong>{{ participant.name }}</strong></div>
+        </div>
+        <div class="text-end">
+            <div class="text-muted" style="font-size:0.9rem">Ссылка для друзей:</div>
+            <code id="invite-link">{{ request.url_root }}rp/{{ room.id }}</code>
+        </div>
+    </div>
+
+    <div class="mb-2 d-flex justify-content-between align-items-center">
+        <div id="participants" class="text-muted" style="font-size:0.9rem"></div>
+        <form method="post" action="{{ url_for('rooms.lock_room', room_id=room.id) }}" id="lock-form">
+            <input type="hidden" name="locked" id="lock-value" value="{{ '0' if room.locked else '1' }}">
+            <button type="submit" class="btn btn-sm btn-outline-light">
+                {{ "🔓 Открыть для новых" if room.locked else "🔒 Закрыть для новых" }}
+            </button>
+        </form>
+    </div>
+
+    <div id="messages" style="height:420px; overflow-y:auto; background:#111827; border-radius:10px; padding:16px; margin-bottom:14px;"></div>
+
+    <div id="turn-banner" class="alert alert-secondary" style="display:none"></div>
+
+    <form id="message-form" class="d-flex" style="gap:8px">
+        <input class="form-control" id="message-input" placeholder="Напиши сообщение..." autocomplete="off">
+        <button class="btn btn-primary" type="submit" id="send-btn">Отправить</button>
+    </form>
+</div>
+
+<script>
+const roomId = "{{ room.id }}";
+const myId = "{{ participant.id }}";
+const stateUrl = "{{ url_for('rooms.room_state', room_id=room.id) }}";
+const messageUrl = "{{ url_for('rooms.send_message', room_id=room.id) }}";
+
+const messagesEl = document.getElementById("messages");
+const participantsEl = document.getElementById("participants");
+const turnBannerEl = document.getElementById("turn-banner");
+const form = document.getElementById("message-form");
+const input = document.getElementById("message-input");
+const sendBtn = document.getElementById("send-btn");
+
+let lastMessageCount = -1;
+
+function renderMessages(messages) {
+    if (messages.length === lastMessageCount) return;
+    lastMessageCount = messages.length;
+
+    messagesEl.innerHTML = messages.map(m => {
+        const who = m.author || (m.role === "assistant" ? "Персонаж" : "?");
+        const isMe = m.role === "user" && who === "{{ participant.name }}";
+        const align = m.role === "assistant" ? "left" : (isMe ? "right" : "left");
+        const bg = m.role === "assistant" ? "#1f2937" : (isMe ? "#2563eb" : "#374151");
+        return `<div style="text-align:${align}; margin-bottom:10px;">
+            <div style="display:inline-block; max-width:80%; background:${bg}; padding:8px 12px; border-radius:10px; text-align:left;">
+                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:2px;">${who}</div>
+                <div style="white-space:pre-wrap;">${escapeHtml(m.content)}</div>
+            </div>
+        </div>`;
+    }).join("");
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function renderParticipants(participants, currentTurn) {
+    participantsEl.innerHTML = "Участники: " + participants.map(p => {
+        const marker = p.id === currentTurn ? " ✍️" : "";
+        return escapeHtml(p.name) + marker;
+    }).join(", ");
+}
+
+function updateTurnUI(currentTurn, locked) {
+    const myTurn = currentTurn === myId;
+    input.disabled = !myTurn;
+    sendBtn.disabled = !myTurn;
+
+    if (!currentTurn) {
+        turnBannerEl.style.display = "none";
+    } else if (myTurn) {
+        turnBannerEl.style.display = "none";
+        input.placeholder = "Твоя очередь — напиши сообщение...";
+    } else {
+        turnBannerEl.style.display = "block";
+        turnBannerEl.textContent = "Ждём ход другого участника...";
+    }
+}
+
+async function poll() {
+    try {
+        const res = await fetch(stateUrl);
+        const data = await res.json();
+        renderMessages(data.messages);
+        renderParticipants(data.participants, data.current_turn);
+        updateTurnUI(data.current_turn, data.locked);
+    } catch (e) {
+        console.error("poll failed", e);
+    }
+}
+
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    sendBtn.disabled = true;
+    const body = new URLSearchParams();
+    body.append("message", text);
+
+    try {
+        const res = await fetch(messageUrl, { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || "Не удалось отправить сообщение");
+        } else {
+            input.value = "";
+        }
+    } catch (e) {
+        alert("Ошибка сети при отправке");
+    }
+    await poll();
+});
+
+poll();
+setInterval(poll, 2000);
+</script>
+{% endblock %}
