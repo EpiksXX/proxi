@@ -1,48 +1,85 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ "Редактировать плагин" if plugin else "Новый плагин" }}</h1>
+<h1>{{ "Редактировать правило" if plugin else "Новое правило плагина" }}</h1>
 <form method="post">
     <div class="mb-3">
         <label class="form-label">Название</label>
         <input class="form-control" name="name" value="{{ plugin.name if plugin else '' }}" required>
     </div>
+
     <div class="mb-3">
         <label class="form-label">Триггер</label>
-        <select class="form-select" name="trigger">
+        <select class="form-select" name="trigger" id="trigger-select" onchange="updateTriggerFields()">
             <option value="always" {{ "selected" if not plugin or plugin.trigger == "always" else "" }}>
                 Всегда
             </option>
+            <option value="keyword" {{ "selected" if plugin and plugin.trigger == "keyword" else "" }}>
+                По ключевому слову в последних сообщениях
+            </option>
+            <option value="interval" {{ "selected" if plugin and plugin.trigger == "interval" else "" }}>
+                Каждые N сообщений
+            </option>
             <option value="regex" {{ "selected" if plugin and plugin.trigger == "regex" else "" }}>
-                По regex-совпадению в последних сообщениях
+                По regex (продвинутый вариант)
             </option>
         </select>
     </div>
-    <div class="mb-3">
-        <label class="form-label">Regex-паттерн (только для триггера "regex")</label>
+
+    <div class="mb-3" id="field-keywords">
+        <label class="form-label">Ключевые слова (через запятую)</label>
+        <input class="form-control" name="keywords" value="{{ plugin.keywords|join(', ') if plugin else '' }}">
+    </div>
+
+    <div class="mb-3" id="field-pattern">
+        <label class="form-label">Regex-паттерн</label>
         <input class="form-control" name="pattern" value="{{ plugin.pattern if plugin else '' }}"
                placeholder="например: \bдракон\w*\b">
     </div>
+
+    <div class="mb-3 d-flex" id="field-interval" style="gap:16px">
+        <div style="max-width:220px">
+            <label class="form-label">Интервал (каждые N сообщений)</label>
+            <input type="number" class="form-control" name="interval" value="{{ plugin.interval if plugin else 0 }}">
+        </div>
+        <div style="max-width:220px">
+            <label class="form-label">Начать после N-го сообщения</label>
+            <input type="number" class="form-control" name="start_after" value="{{ plugin.start_after if plugin else 0 }}">
+            <small class="text-muted">Если 0 — берётся значение интервала.</small>
+        </div>
+    </div>
+
     <div class="mb-3">
-        <label class="form-label">Позиция вставки текста</label>
-        <select class="form-select" name="position">
-            <option value="before" {{ "selected" if plugin and plugin.position == "before" else "" }}>
-                Перед системным промптом
-            </option>
-            <option value="after" {{ "selected" if not plugin or plugin.position == "after" else "" }}>
-                После системного промпта
-            </option>
+        <label class="form-label">Варианты текста (по одному на строку — выбирается случайно)</label>
+        <textarea class="form-control" name="pool" rows="8">{{ plugin.pool|join('\n') if plugin else '' }}</textarea>
+        <small class="text-muted">Если вариант один — просто напиши его одной строкой.</small>
+    </div>
+
+    <div class="mb-3" style="max-width:260px">
+        <label class="form-label">Роль (информационно)</label>
+        <select class="form-select" name="role">
+            <option value="system" {{ "selected" if not plugin or plugin.role == "system" else "" }}>system</option>
+            <option value="user" {{ "selected" if plugin and plugin.role == "user" else "" }}>user</option>
         </select>
+        <small class="text-muted">Не влияет на вставку — текст всегда идёт в системный промпт.</small>
     </div>
-    <div class="mb-3">
-        <label class="form-label">Текст плагина</label>
-        <textarea class="form-control" name="text" rows="8">{{ plugin.text if plugin else '' }}</textarea>
-    </div>
+
     <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" name="enabled" id="en"
                {{ "checked" if not plugin or plugin.enabled else "" }}>
         <label class="form-check-label" for="en">Включено</label>
     </div>
+
     <button class="btn btn-primary" type="submit">Сохранить</button>
     <a class="btn btn-secondary" href="{{ url_for('admin.plugins_list') }}">Отмена</a>
 </form>
+
+<script>
+function updateTriggerFields() {
+    var trigger = document.getElementById('trigger-select').value;
+    document.getElementById('field-keywords').style.display = (trigger === 'keyword') ? 'block' : 'none';
+    document.getElementById('field-pattern').style.display = (trigger === 'regex') ? 'block' : 'none';
+    document.getElementById('field-interval').style.display = (trigger === 'interval') ? 'flex' : 'none';
+}
+updateTriggerFields();
+</script>
 {% endblock %}
