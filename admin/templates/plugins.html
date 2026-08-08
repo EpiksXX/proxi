@@ -1,42 +1,96 @@
 {% extends "base.html" %}
 {% block content %}
+{% if imported %}
+<div class="alert alert-success">Импортировано правил: {{ imported }}</div>
+{% endif %}
+
 <div class="page-header">
     <h1>Plugins</h1>
-    <a class="btn btn-primary" href="{{ url_for('admin.plugins_new') }}">+ Новый плагин</a>
+    <div>
+        <a class="btn btn-secondary" href="{{ url_for('admin.plugins_import') }}">📥 Импорт JSON</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.plugins_new') }}">+ Новый плагин</a>
+    </div>
 </div>
-<table class="table table-dark table-hover align-middle">
-    <thead>
-        <tr>
-            <th>Название</th>
-            <th>Тег для промпта</th>
-            <th>Триггер</th>
-            <th>Позиция</th>
-            <th>Статус</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for p in plugins %}
-        <tr>
-            <td>{{ p.name }}</td>
-            <td><code>&lt;PLUGIN={{ p.id }}&gt;</code></td>
-            <td>{{ p.trigger }}{% if p.trigger == "regex" %} <code>{{ p.pattern }}</code>{% endif %}</td>
-            <td>{{ "перед промптом" if p.position == "before" else "после промпта" }}</td>
-            <td>{{ "🟢 включено" if p.enabled else "⚪ выключено" }}</td>
-            <td class="text-nowrap">
-                <a href="{{ url_for('admin.plugins_edit', plugin_id=p.id) }}" title="Редактировать">✏️</a>
-                <form style="display:inline" method="post" action="{{ url_for('admin.plugins_toggle', plugin_id=p.id) }}">
-                    <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
-                </form>
-                <form style="display:inline" method="post" action="{{ url_for('admin.plugins_delete', plugin_id=p.id) }}"
-                      onsubmit="return confirm('Удалить плагин «{{ p.name }}»?');">
-                    <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
-                </form>
-            </td>
-        </tr>
-    {% else %}
-        <tr><td colspan="6">Пока нет плагинов</td></tr>
-    {% endfor %}
-    </tbody>
-</table>
+
+{% for group in groups %}
+<details class="lore-folder" {{ "open" if group.source == open_source else "" }}>
+    <summary>
+        <span class="lore-folder-title">📁 {{ group.source }}</span>
+        <span class="lore-folder-meta">
+            <span class="text-muted">{{ group.total }} правил · включено {{ group.enabled_count }}</span>
+            <code>&lt;PLUGIN={{ group.code }}&gt;</code>
+        </span>
+    </summary>
+
+    <div class="lore-folder-body">
+        <p class="text-muted" style="margin-bottom:14px">
+            Вставь этот код в системный промпт / character card, чтобы подключить набор правил:
+            <code>&lt;PLUGIN={{ group.code }}&gt;</code> — каждое правило внутри сработает по своему
+            собственному условию (всегда / по ключевому слову / каждые N сообщений).
+        </p>
+
+        <div class="mb-3 d-flex" style="gap:8px">
+            <form method="post" action="{{ url_for('admin.plugins_bulk_toggle') }}">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <input type="hidden" name="enabled" value="1">
+                <button type="submit" class="btn btn-outline-light btn-sm">🟢 Включить все</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.plugins_bulk_toggle') }}">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <input type="hidden" name="enabled" value="0">
+                <button type="submit" class="btn btn-outline-light btn-sm">⚪ Выключить все</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.plugins_bulk_delete') }}"
+                  onsubmit="return confirm('Удалить ВСЕ правила источника «{{ group.source }}»? Это необратимо.');">
+                <input type="hidden" name="source" value="{{ group.source }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">🗑️ Удалить все</button>
+            </form>
+        </div>
+
+        <table class="table table-dark table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Триггер</th>
+                    <th>Вариантов текста</th>
+                    <th>Статус</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in group.plugins %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td>
+                        {% if p.trigger == "keyword" %}
+                            по слову: <code>{{ p.keywords|join(", ") }}</code>
+                        {% elif p.trigger == "regex" %}
+                            regex: <code>{{ p.pattern }}</code>
+                        {% elif p.trigger == "interval" %}
+                            каждые {{ p.interval }} сообщ. (с {{ p.start_after }}-го)
+                        {% else %}
+                            всегда
+                        {% endif %}
+                    </td>
+                    <td>{{ p.pool|length if p.pool else 0 }}</td>
+                    <td>{{ "🟢 включено" if p.enabled else "⚪ выключено" }}</td>
+                    <td class="text-nowrap">
+                        <a href="{{ url_for('admin.plugins_edit', plugin_id=p.id) }}" title="Редактировать">✏️</a>
+                        <form style="display:inline" method="post" action="{{ url_for('admin.plugins_toggle', plugin_id=p.id) }}">
+                            <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
+                        </form>
+                        <form style="display:inline" method="post" action="{{ url_for('admin.plugins_delete', plugin_id=p.id) }}"
+                              onsubmit="return confirm('Удалить правило «{{ p.name }}»?');">
+                            <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% else %}
+<p class="text-muted">Пока нет плагинов</p>
+{% endfor %}
 {% endblock %}
