@@ -7,6 +7,7 @@ from gemini import generate
 
 # Админ-панель
 from admin.routes import admin
+from rooms.routes import rooms
 
 import logging
 import time
@@ -28,6 +29,7 @@ CORS(
 
 # Регистрируем Blueprint админ-панели
 app.register_blueprint(admin)
+app.register_blueprint(rooms)
 
 
 @app.after_request
