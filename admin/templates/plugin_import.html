@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Импорт плагина из JSON</h1>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<p>Поддерживаются два формата файла:</p>
+<ul>
+    <li><strong>Экспорт плагина LoreBary</strong> — файл с полем <code>entries</code>,
+        где у каждой записи есть <code>triggerGroups</code> и <code>actions</code>
+        (типы триггеров: всегда, ключевое слово, каждые N сообщений)</li>
+    <li><strong>Собственный формат этой панели</strong> — список правил с полями
+        <code>name</code>, <code>trigger</code>, <code>pool</code> и т.д.</li>
+</ul>
+
+<form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+        <input class="form-control" type="file" name="file" accept=".json,application/json" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Импортировать</button>
+    <a class="btn btn-secondary" href="{{ url_for('admin.plugins_list') }}">Отмена</a>
+</form>
+{% endblock %}
