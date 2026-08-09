@@ -72,6 +72,31 @@ def _current_turn(room):
     return None  # все уже написали — раунд обрабатывается / комната без участников
 
 
+def _build_final_system_prompt(room):
+    """
+    Собирает системный промпт для запроса к Gemini: сначала прогоняет базовый
+    системный промпт комнаты через движок лорбуков/плагинов (<LOREBOOK=...>,
+    <PLUGIN=...>), затем добавляет описания персонажей всех участников —
+    чтобы ИИ понимал, кто есть кто в общем чате.
+    """
+    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
+    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+
+    persona_lines = [
+        f"— {p['name']}: {p['persona']}"
+        for p in room["participants"]
+        if p.get("persona")
+    ]
+    if persona_lines:
+        persona_block = "\n".join(persona_lines)
+        system_prompt = (
+            f"{system_prompt}\n\n[Персонажи участников]\n{persona_block}"
+            if system_prompt else f"[Персонажи участников]\n{persona_block}"
+        )
+
+    return system_prompt
+
+
 @rooms.route("/new", methods=["GET", "POST"])
 def new_room():
     if request.method == "POST":
@@ -103,6 +128,7 @@ def room_page(room_id):
 @rooms.route("/<room_id>/join", methods=["POST"])
 def join_room(room_id):
     name = request.form.get("name", "").strip()
+    persona = request.form.get("persona", "").strip()
     room = storage.get_room(room_id)
     if not room:
         return render_template("room_not_found.html"), 404
@@ -110,7 +136,7 @@ def join_room(room_id):
     if not name:
         return render_template("join_room.html", room=room, error="Введи имя, чтобы присоединиться.")
 
-    room, participant = storage.add_participant(room_id, name)
+    room, participant = storage.add_participant(room_id, name, persona)
     if participant is None:
         return render_template("join_room.html", room=room, error="Комната закрыта для новых участников.")
 
@@ -169,9 +195,9 @@ def send_message(room_id):
         return jsonify({"ok": True, "round_complete": False})
 
     # Раунд завершён — прогоняем всю накопленную историю через движок
-    # лорбуков/плагинов и получаем один ответ персонажа на весь раунд разом.
-    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
-    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+    # лорбуков/плагинов + добавляем персонажей участников, и получаем
+    # один ответ персонажа на весь раунд разом.
+    system_prompt = _build_final_system_prompt(room)
 
     contents = []
     for m in room["messages"]:
@@ -212,8 +238,7 @@ def retry_round(room_id):
     if not room.get("api_key"):
         return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
 
-    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
-    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+    system_prompt = _build_final_system_prompt(room)
 
     contents = []
     for m in room["messages"]:
