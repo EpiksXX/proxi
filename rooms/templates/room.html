@@ -23,9 +23,16 @@
         </form>
     </div>
 
+    <div id="round-progress" class="text-muted mb-2" style="font-size:0.85rem"></div>
+
     <div id="messages" style="height:420px; overflow-y:auto; background:#111827; border-radius:10px; padding:16px; margin-bottom:14px;"></div>
 
+    <div id="error-banner" class="alert alert-danger" style="display:none"></div>
     <div id="turn-banner" class="alert alert-secondary" style="display:none"></div>
+    <div id="retry-banner" class="alert alert-warning d-flex justify-content-between align-items-center" style="display:none">
+        <span>Все написали, но ответ от ИИ не пришёл (была ошибка).</span>
+        <button id="retry-btn" class="btn btn-sm btn-warning">Повторить</button>
+    </div>
 
     <form id="message-form" class="d-flex" style="gap:8px">
         <input class="form-control" id="message-input" placeholder="Напиши сообщение..." autocomplete="off">
@@ -36,17 +43,36 @@
 <script>
 const roomId = "{{ room.id }}";
 const myId = "{{ participant.id }}";
+const myName = "{{ participant.name }}";
 const stateUrl = "{{ url_for('rooms.room_state', room_id=room.id) }}";
 const messageUrl = "{{ url_for('rooms.send_message', room_id=room.id) }}";
+const retryUrl = "{{ url_for('rooms.retry_round', room_id=room.id) }}";
 
 const messagesEl = document.getElementById("messages");
 const participantsEl = document.getElementById("participants");
+const roundProgressEl = document.getElementById("round-progress");
 const turnBannerEl = document.getElementById("turn-banner");
+const errorBannerEl = document.getElementById("error-banner");
+const retryBannerEl = document.getElementById("retry-banner");
+const retryBtn = document.getElementById("retry-btn");
 const form = document.getElementById("message-form");
 const input = document.getElementById("message-input");
 const sendBtn = document.getElementById("send-btn");
 
 let lastMessageCount = -1;
+let stuckSince = null;      // с какого момента раунд выглядит "завершён, но ИИ не ответил"
+
+function showError(msg) {
+    errorBannerEl.textContent = msg;
+    errorBannerEl.style.display = "block";
+    setTimeout(() => { errorBannerEl.style.display = "none"; }, 6000);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 function renderMessages(messages) {
     if (messages.length === lastMessageCount) return;
@@ -54,23 +80,17 @@ function renderMessages(messages) {
 
     messagesEl.innerHTML = messages.map(m => {
         const who = m.author || (m.role === "assistant" ? "Персонаж" : "?");
-        const isMe = m.role === "user" && who === "{{ participant.name }}";
+        const isMe = m.role === "user" && who === myName;
         const align = m.role === "assistant" ? "left" : (isMe ? "right" : "left");
         const bg = m.role === "assistant" ? "#1f2937" : (isMe ? "#2563eb" : "#374151");
         return `<div style="text-align:${align}; margin-bottom:10px;">
             <div style="display:inline-block; max-width:80%; background:${bg}; padding:8px 12px; border-radius:10px; text-align:left;">
-                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:2px;">${who}</div>
+                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(who)}</div>
                 <div style="white-space:pre-wrap;">${escapeHtml(m.content)}</div>
             </div>
         </div>`;
     }).join("");
     messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function renderParticipants(participants, currentTurn) {
@@ -80,19 +100,39 @@ function renderParticipants(participants, currentTurn) {
     }).join(", ");
 }
 
-function updateTurnUI(currentTurn, locked) {
+function renderRoundProgress(participants, roundSubmitted) {
+    const total = participants.length;
+    const done = roundSubmitted.length;
+    if (total === 0) {
+        roundProgressEl.textContent = "";
+        return;
+    }
+    roundProgressEl.textContent = `Раунд: написали ${done} из ${total}`;
+}
+
+function updateTurnUI(currentTurn, participants, roundSubmitted) {
     const myTurn = currentTurn === myId;
+    const roundFullySubmitted = participants.length > 0 && roundSubmitted.length >= participants.length;
+
     input.disabled = !myTurn;
     sendBtn.disabled = !myTurn;
 
-    if (!currentTurn) {
-        turnBannerEl.style.display = "none";
-    } else if (myTurn) {
-        turnBannerEl.style.display = "none";
-        input.placeholder = "Твоя очередь — напиши сообщение...";
-    } else {
+    if (roundFullySubmitted) {
+        // все написали — ждём ответа ИИ. Если это затянулось, покажем "Повторить".
         turnBannerEl.style.display = "block";
-        turnBannerEl.textContent = "Ждём ход другого участника...";
+        turnBannerEl.textContent = "Все написали — персонаж обдумывает ответ...";
+        if (stuckSince === null) stuckSince = Date.now();
+        retryBannerEl.style.display = (Date.now() - stuckSince > 8000) ? "flex" : "none";
+    } else {
+        stuckSince = null;
+        retryBannerEl.style.display = "none";
+        if (myTurn) {
+            turnBannerEl.style.display = "none";
+            input.placeholder = "Твоя очередь — напиши сообщение...";
+        } else {
+            turnBannerEl.style.display = "block";
+            turnBannerEl.textContent = "Ждём сообщение от другого участника...";
+        }
     }
 }
 
@@ -102,7 +142,8 @@ async function poll() {
         const data = await res.json();
         renderMessages(data.messages);
         renderParticipants(data.participants, data.current_turn);
-        updateTurnUI(data.current_turn, data.locked);
+        renderRoundProgress(data.participants, data.round_submitted);
+        updateTurnUI(data.current_turn, data.participants, data.round_submitted);
     } catch (e) {
         console.error("poll failed", e);
     }
@@ -121,13 +162,28 @@ form.addEventListener("submit", async (e) => {
         const res = await fetch(messageUrl, { method: "POST", body });
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error || "Не удалось отправить сообщение");
+            showError(data.error || "Не удалось отправить сообщение");
         } else {
             input.value = "";
         }
     } catch (e) {
-        alert("Ошибка сети при отправке");
+        showError("Ошибка сети при отправке");
     }
+    await poll();
+});
+
+retryBtn.addEventListener("click", async () => {
+    retryBtn.disabled = true;
+    try {
+        const res = await fetch(retryUrl, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+            showError(data.error || "Не удалось повторить запрос");
+        }
+    } catch (e) {
+        showError("Ошибка сети при повторе");
+    }
+    retryBtn.disabled = false;
     await poll();
 });
 
