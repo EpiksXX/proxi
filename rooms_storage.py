@@ -53,10 +53,10 @@ def create_room(character_name, system_prompt, api_key, temperature=1.0, max_tok
         "api_key": api_key,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "participants": [],   # [{"id":.., "name":.., "joined_at":..}]
-        "turn_index": 0,
-        "messages": [],        # [{"role":"user"/"assistant", "author":.., "content":.., "ts":..}]
-        "locked": False,       # запрещает вход новым участникам
+        "participants": [],       # [{"id":.., "name":.., "joined_at":..}]
+        "round_submitted": [],    # id участников, уже написавших в текущем раунде
+        "messages": [],            # [{"role":"user"/"assistant", "author":.., "content":.., "ts":..}]
+        "locked": False,           # запрещает вход новым участникам
         "created_at": time.time(),
     }
     _save(rooms)
@@ -98,12 +98,26 @@ def append_message(room_id, role, content, author=None):
     return room
 
 
-def advance_turn(room_id):
+def mark_submitted(room_id, participant_id):
+    """Отмечает, что участник написал своё сообщение в текущем раунде."""
     rooms = _load()
     room = rooms.get(room_id)
-    if not room or not room["participants"]:
-        return room
-    room["turn_index"] = (room["turn_index"] + 1) % len(room["participants"])
+    if not room:
+        return None
+    if participant_id not in room["round_submitted"]:
+        room["round_submitted"].append(participant_id)
+    rooms[room_id] = room
+    _save(rooms)
+    return room
+
+
+def reset_round(room_id):
+    """Начинает новый раунд после того, как ИИ обработал все сообщения текущего."""
+    rooms = _load()
+    room = rooms.get(room_id)
+    if not room:
+        return None
+    room["round_submitted"] = []
     rooms[room_id] = room
     _save(rooms)
     return room
