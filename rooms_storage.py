@@ -67,7 +67,7 @@ def get_room(room_id):
     return _load().get(room_id)
 
 
-def add_participant(room_id, name):
+def add_participant(room_id, name, persona=""):
     rooms = _load()
     room = rooms.get(room_id)
     if not room:
@@ -75,7 +75,12 @@ def add_participant(room_id, name):
     if room.get("locked"):
         return room, None
 
-    participant = {"id": uuid.uuid4().hex[:8], "name": name[:40], "joined_at": time.time()}
+    participant = {
+        "id": uuid.uuid4().hex[:8],
+        "name": name[:40],
+        "persona": persona[:2000],
+        "joined_at": time.time(),
+    }
     room["participants"].append(participant)
     rooms[room_id] = room
     _save(rooms)
