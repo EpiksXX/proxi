@@ -63,6 +63,15 @@ def _current_participant(room):
     return next((p for p in room["participants"] if p["id"] == visitor_id), None)
 
 
+def _current_turn(room):
+    """Первый участник (по порядку присоединения), кто ещё не написал в этом раунде."""
+    submitted = set(room.get("round_submitted", []))
+    for p in room["participants"]:
+        if p["id"] not in submitted:
+            return p
+    return None  # все уже написали — раунд обрабатывается / комната без участников
+
+
 @rooms.route("/new", methods=["GET", "POST"])
 def new_room():
     if request.method == "POST":
@@ -116,15 +125,14 @@ def room_state(room_id):
     if not room:
         return jsonify({"error": "not found"}), 404
 
-    current_turn_id = None
-    if room["participants"]:
-        current_turn_id = room["participants"][room["turn_index"] % len(room["participants"])]["id"]
+    current_turn = _current_turn(room)
 
     return jsonify({
         "character_name": room["character_name"],
         "messages": room["messages"],
         "participants": room["participants"],
-        "current_turn": current_turn_id,
+        "round_submitted": room.get("round_submitted", []),
+        "current_turn": current_turn["id"] if current_turn else None,
         "locked": room["locked"],
     })
 
@@ -139,10 +147,10 @@ def send_message(room_id):
     if not participant:
         return jsonify({"error": "Сначала присоединись к комнате"}), 403
 
-    if room["participants"]:
-        current = room["participants"][room["turn_index"] % len(room["participants"])]
-        if current["id"] != participant["id"]:
-            return jsonify({"error": f"Сейчас очередь: {current['name']}"}), 403
+    current = _current_turn(room)
+    if not current or current["id"] != participant["id"]:
+        name = current["name"] if current else "—"
+        return jsonify({"error": f"Сейчас очередь: {name}"}), 403
 
     text = request.form.get("message", "").strip()
     if not text:
@@ -153,9 +161,57 @@ def send_message(room_id):
 
     # Сообщение человека — подписываем именем, чтобы модель различала участников
     storage.append_message(room_id, "user", f"{participant['name']}: {text}", author=participant["name"])
-    room = storage.advance_turn(room_id)
+    room = storage.mark_submitted(room_id, participant["id"])
 
-    # Пересобираем историю и прогоняем через движок лорбуков/плагинов
+    # Ждём, пока своё сообщение не напишут ВСЕ участники — только после этого
+    # раунд считается завершённым и мы обращаемся к ИИ.
+    if len(room["round_submitted"]) < len(room["participants"]):
+        return jsonify({"ok": True, "round_complete": False})
+
+    # Раунд завершён — прогоняем всю накопленную историю через движок
+    # лорбуков/плагинов и получаем один ответ персонажа на весь раунд разом.
+    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
+    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+
+    contents = []
+    for m in room["messages"]:
+        role = "model" if m["role"] == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": m["content"]}]})
+
+    try:
+        reply_text = _call_gemini(
+            system_prompt, contents, room["api_key"], room["temperature"], room["max_tokens"]
+        )
+    except Exception as e:
+        # Раунд НЕ сбрасываем — иначе при ошибке Gemini придётся заново
+        # писать сообщения всем участникам. Первый, кто нажмёт "Отправить"
+        # ещё раз (после того как ошибка исчезнет), повторно попадёт в
+        # состояние "раунд завершён" и вызовет ИИ снова.
+        return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
+
+    storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
+    storage.reset_round(room_id)
+
+    return jsonify({"ok": True, "round_complete": True})
+
+
+@rooms.route("/<room_id>/retry", methods=["POST"])
+def retry_round(room_id):
+    """
+    Повторить обращение к Gemini для уже завершённого раунда — на случай,
+    если предыдущая попытка упала с ошибкой (429/503/неверный ключ и т.д.),
+    и никому не пришлось бы заново печатать свои сообщения.
+    """
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    if not room["participants"] or len(room["round_submitted"]) < len(room["participants"]):
+        return jsonify({"error": "Раунд ещё не завершён — сначала должны написать все участники"}), 400
+
+    if not room.get("api_key"):
+        return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
+
     history_msgs = [_Msg(m["content"]) for m in room["messages"]]
     system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
 
@@ -172,6 +228,7 @@ def send_message(room_id):
         return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
 
     storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
+    storage.reset_round(room_id)
 
     return jsonify({"ok": True})
 
