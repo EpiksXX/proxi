@@ -96,7 +96,8 @@ function renderMessages(messages) {
 function renderParticipants(participants, currentTurn) {
     participantsEl.innerHTML = "Участники: " + participants.map(p => {
         const marker = p.id === currentTurn ? " ✍️" : "";
-        return escapeHtml(p.name) + marker;
+        const title = p.persona ? ` title="${escapeHtml(p.persona)}"` : "";
+        return `<span${title} style="cursor:${p.persona ? "help" : "default"}">${escapeHtml(p.name)}${marker}</span>`;
     }).join(", ");
 }
 
