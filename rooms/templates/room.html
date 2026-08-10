@@ -1,194 +1,98 @@
-{% extends "rp_base.html" %}
-{% block title %}{{ room.character_name }}{% endblock %}
-{% block content %}
-<div class="rp-card">
-    <div class="d-flex justify-content-between align-items-start mb-3">
-        <div>
-            <h1 style="margin-bottom:4px">{{ room.character_name }}</h1>
-            <div class="text-muted">Ты: <strong>{{ participant.name }}</strong></div>
-        </div>
-        <div class="text-end">
-            <div class="text-muted" style="font-size:0.9rem">Ссылка для друзей:</div>
-            <code id="invite-link">{{ request.url_root }}rp/{{ room.id }}</code>
-        </div>
-    </div>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}RP{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    :root{
+        --bg: #0b1220;
+        --card: #0f1724;
+        --muted: #9ca3af;
+        --accent: #4f46e5; /* indigo */
+        --accent-2: #06b6d4; /* cyan */
+        --bubble-user: #2563eb;
+        --bubble-other: #111827;
+        --bubble-assistant: #1f2937;
+        --text: #e6eef8;
+    }
+    *{box-sizing:border-box}
+    body{
+        margin:0;
+        background:linear-gradient(180deg, rgba(9,10,14,1) 0%, rgba(15,18,36,1) 100%);
+        color:var(--text);
+        font-family: 'Inter', Arial, sans-serif;
+        -webkit-font-smoothing:antialiased;
+        -moz-osx-font-smoothing:grayscale;
+    }
+    .rp-page{
+        max-width:960px;
+        margin:28px auto;
+        padding:16px;
+    }
+    .rp-card{
+        background: linear-gradient(180deg, rgba(17,24,39,0.85), rgba(15,23,42,0.9));
+        border-radius:12px;
+        padding:20px;
+        box-shadow: 0 6px 24px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.03);
+    }
+    h1{font-weight:600;color:var(--text);}
+    .muted{color:var(--muted)}
 
-    <div class="mb-2 d-flex justify-content-between align-items-center">
-        <div id="participants" class="text-muted" style="font-size:0.9rem"></div>
-        <form method="post" action="{{ url_for('rooms.lock_room', room_id=room.id) }}" id="lock-form">
-            <input type="hidden" name="locked" id="lock-value" value="{{ '0' if room.locked else '1' }}">
-            <button type="submit" class="btn btn-sm btn-outline-light">
-                {{ "🔓 Открыть для новых" if room.locked else "🔒 Закрыть для новых" }}
-            </button>
-        </form>
-    </div>
+    /* Message area */
+    #messages{
+        height:480px;
+        overflow-y:auto;
+        background:linear-gradient(180deg, rgba(2,6,23,0.2), rgba(2,6,23,0));
+        border-radius:12px;
+        padding:18px;
+        margin-bottom:14px;
+        border:1px solid rgba(255,255,255,0.03);
+        display:flex;flex-direction:column;gap:10px;
+    }
+    .msg-row{display:flex;gap:12px;align-items:flex-end}
+    .msg-row.right{flex-direction:row-reverse}
+    .avatar{
+        width:40px;height:40px;border-radius:50%;display:inline-grid;place-items:center;font-weight:600;color:#041124;background:linear-gradient(135deg,var(--accent),var(--accent-2));flex:0 0 40px
+    }
+    .bubble{
+        max-width:78%;padding:10px 14px;border-radius:12px;color:var(--text);white-space:pre-wrap;line-height:1.4;font-size:0.95rem;box-shadow: 0 4px 10px rgba(2,6,23,0.6);
+    }
+    .bubble.user{background:linear-gradient(180deg,var(--bubble-user), #1e40af);border-bottom-right-radius:6px}
+    .bubble.other{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.02)}
+    .bubble.assistant{background:linear-gradient(180deg,var(--bubble-assistant), #111827);border:1px solid rgba(255,255,255,0.02)}
+    .meta{font-size:0.75rem;color:var(--muted);margin-bottom:6px}
 
-    <div id="round-progress" class="text-muted mb-2" style="font-size:0.85rem"></div>
+    /* Input */
+    #message-form{display:flex;gap:8px;align-items:center}
+    #message-input{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.06);padding:10px 12px;border-radius:10px;color:var(--text);}
+    #message-input:focus{outline:none;box-shadow:0 0 0 3px rgba(79,70,229,0.12);border-color:var(--accent)}
+    #send-btn{min-width:110px}
 
-    <div id="messages" style="height:420px; overflow-y:auto; background:#111827; border-radius:10px; padding:16px; margin-bottom:14px;"></div>
+    /* Participants */
+    #participants{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .participant{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:0.9rem}
+    .participant .p-avatar{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-weight:600;background:rgba(255,255,255,0.04)}
 
-    <div id="error-banner" class="alert alert-danger" style="display:none"></div>
-    <div id="turn-banner" class="alert alert-secondary" style="display:none"></div>
-    <div id="retry-banner" class="alert alert-warning d-flex justify-content-between align-items-center" style="display:none">
-        <span>Все написали, но ответ от ИИ не пришёл (была ошибка).</span>
-        <button id="retry-btn" class="btn btn-sm btn-warning">Повторить</button>
-    </div>
+    /* Invite link */
+    .invite{display:flex;gap:8px;align-items:center}
+    .invite code{background:transparent;color:var(--accent-2);padding:6px;border-radius:8px;border:1px dashed rgba(255,255,255,0.03)}
 
-    <form id="message-form" class="d-flex" style="gap:8px">
-        <input class="form-control" id="message-input" placeholder="Напиши сообщение..." autocomplete="off">
-        <button class="btn btn-primary" type="submit" id="send-btn">Отправить</button>
-    </form>
+    /* Banners */
+    .alert{border-radius:10px}
+
+    @media (max-width:720px){
+        .rp-page{margin:12px}
+        #messages{height:380px}
+    }
+</style>
+</head>
+<body>
+<div class="rp-page">
+    {% block content %}{% endblock %}
 </div>
-
-<script>
-const roomId = "{{ room.id }}";
-const myId = "{{ participant.id }}";
-const myName = "{{ participant.name }}";
-const stateUrl = "{{ url_for('rooms.room_state', room_id=room.id) }}";
-const messageUrl = "{{ url_for('rooms.send_message', room_id=room.id) }}";
-const retryUrl = "{{ url_for('rooms.retry_round', room_id=room.id) }}";
-
-const messagesEl = document.getElementById("messages");
-const participantsEl = document.getElementById("participants");
-const roundProgressEl = document.getElementById("round-progress");
-const turnBannerEl = document.getElementById("turn-banner");
-const errorBannerEl = document.getElementById("error-banner");
-const retryBannerEl = document.getElementById("retry-banner");
-const retryBtn = document.getElementById("retry-btn");
-const form = document.getElementById("message-form");
-const input = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-btn");
-
-let lastMessageCount = -1;
-let stuckSince = null;      // с какого момента раунд выглядит "завершён, но ИИ не ответил"
-
-function showError(msg) {
-    errorBannerEl.textContent = msg;
-    errorBannerEl.style.display = "block";
-    setTimeout(() => { errorBannerEl.style.display = "none"; }, 6000);
-}
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function renderMessages(messages) {
-    if (messages.length === lastMessageCount) return;
-    lastMessageCount = messages.length;
-
-    messagesEl.innerHTML = messages.map(m => {
-        const who = m.author || (m.role === "assistant" ? "Персонаж" : "?");
-        const isMe = m.role === "user" && who === myName;
-        const align = m.role === "assistant" ? "left" : (isMe ? "right" : "left");
-        const bg = m.role === "assistant" ? "#1f2937" : (isMe ? "#2563eb" : "#374151");
-        return `<div style="text-align:${align}; margin-bottom:10px;">
-            <div style="display:inline-block; max-width:80%; background:${bg}; padding:8px 12px; border-radius:10px; text-align:left;">
-                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(who)}</div>
-                <div style="white-space:pre-wrap;">${escapeHtml(m.content)}</div>
-            </div>
-        </div>`;
-    }).join("");
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function renderParticipants(participants, currentTurn) {
-    participantsEl.innerHTML = "Участники: " + participants.map(p => {
-        const marker = p.id === currentTurn ? " ✍️" : "";
-        const title = p.persona ? ` title="${escapeHtml(p.persona)}"` : "";
-        return `<span${title} style="cursor:${p.persona ? "help" : "default"}">${escapeHtml(p.name)}${marker}</span>`;
-    }).join(", ");
-}
-
-function renderRoundProgress(participants, roundSubmitted) {
-    const total = participants.length;
-    const done = roundSubmitted.length;
-    if (total === 0) {
-        roundProgressEl.textContent = "";
-        return;
-    }
-    roundProgressEl.textContent = `Раунд: написали ${done} из ${total}`;
-}
-
-function updateTurnUI(currentTurn, participants, roundSubmitted) {
-    const myTurn = currentTurn === myId;
-    const roundFullySubmitted = participants.length > 0 && roundSubmitted.length >= participants.length;
-
-    input.disabled = !myTurn;
-    sendBtn.disabled = !myTurn;
-
-    if (roundFullySubmitted) {
-        // все написали — ждём ответа ИИ. Если это затянулось, покажем "Повторить".
-        turnBannerEl.style.display = "block";
-        turnBannerEl.textContent = "Все написали — персонаж обдумывает ответ...";
-        if (stuckSince === null) stuckSince = Date.now();
-        retryBannerEl.style.display = (Date.now() - stuckSince > 8000) ? "flex" : "none";
-    } else {
-        stuckSince = null;
-        retryBannerEl.style.display = "none";
-        if (myTurn) {
-            turnBannerEl.style.display = "none";
-            input.placeholder = "Твоя очередь — напиши сообщение...";
-        } else {
-            turnBannerEl.style.display = "block";
-            turnBannerEl.textContent = "Ждём сообщение от другого участника...";
-        }
-    }
-}
-
-async function poll() {
-    try {
-        const res = await fetch(stateUrl);
-        const data = await res.json();
-        renderMessages(data.messages);
-        renderParticipants(data.participants, data.current_turn);
-        renderRoundProgress(data.participants, data.round_submitted);
-        updateTurnUI(data.current_turn, data.participants, data.round_submitted);
-    } catch (e) {
-        console.error("poll failed", e);
-    }
-}
-
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (!text) return;
-
-    sendBtn.disabled = true;
-    const body = new URLSearchParams();
-    body.append("message", text);
-
-    try {
-        const res = await fetch(messageUrl, { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok) {
-            showError(data.error || "Не удалось отправить сообщение");
-        } else {
-            input.value = "";
-        }
-    } catch (e) {
-        showError("Ошибка сети при отправке");
-    }
-    await poll();
-});
-
-retryBtn.addEventListener("click", async () => {
-    retryBtn.disabled = true;
-    try {
-        const res = await fetch(retryUrl, { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) {
-            showError(data.error || "Не удалось повторить запрос");
-        }
-    } catch (e) {
-        showError("Ошибка сети при повторе");
-    }
-    retryBtn.disabled = false;
-    await poll();
-});
-
-poll();
-setInterval(poll, 2000);
-</script>
-{% endblock %}
+</body>
+</html>
