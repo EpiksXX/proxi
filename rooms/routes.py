@@ -167,15 +167,16 @@ def update_api_key(room_id):
         return jsonify({"error": "Комната не найдена"}), 404
 
     api_key = request.form.get("api_key", "").strip()
-    
-    if hasattr(storage, "update_api_key"):
-        storage.update_api_key(room_id, api_key)
-    elif hasattr(storage, "set_api_key"):
-        storage.set_api_key(room_id, api_key)
-    else:
-        room["api_key"] = api_key
+    storage.update_api_key(room_id, api_key)
 
     return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
+@rooms.route("/<room_id>/delete", methods=["POST"])
+def delete_room(room_id):
+    """Удаление комнаты и перенаправление на создание нового чата."""
+    storage.delete_room(room_id)
+    return redirect(url_for("rooms.new_room"))
 
 
 @rooms.route("/<room_id>/state")
