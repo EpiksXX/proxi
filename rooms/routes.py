@@ -56,8 +56,18 @@ def _call_gemini(system_prompt, contents, api_key, temperature, max_tokens):
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
+def _get_cookie_name(room_id):
+    """Формирует уникальное имя Cookie для каждой комнаты."""
+    return f"{VISITOR_COOKIE}_{room_id}"
+
+
 def _current_participant(room):
-    visitor_id = request.cookies.get(VISITOR_COOKIE)
+    """
+    Получает текущего участника.
+    Сначала проверяется Cookie конкретной комнаты, затем общий Cookie.
+    """
+    cookie_name = _get_cookie_name(room["id"])
+    visitor_id = request.cookies.get(cookie_name) or request.cookies.get(VISITOR_COOKIE)
     if not visitor_id:
         return None
     return next((p for p in room["participants"] if p["id"] == visitor_id), None)
@@ -141,7 +151,12 @@ def join_room(room_id):
         return render_template("join_room.html", room=room, error="Комната закрыта для новых участников.")
 
     resp = make_response(redirect(url_for("rooms.room_page", room_id=room_id)))
-    resp.set_cookie(VISITOR_COOKIE, participant["id"], max_age=60 * 60 * 24 * 30)
+    
+    # Установка Cookie с явным указанием path="/" для постоянного сохранения при перезагрузках
+    cookie_name = _get_cookie_name(room_id)
+    resp.set_cookie(cookie_name, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
+    resp.set_cookie(VISITOR_COOKIE, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
+    
     return resp
 
 
