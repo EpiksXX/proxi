@@ -1,194 +1,291 @@
 {% extends "rp_base.html" %}
-{% block title %}{{ room.character_name }}{% endblock %}
+
+{% block title %}{{ room.character_name }} — Proxi RP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-layout {
+        height: calc(100vh - 57px);
+        display: flex;
+    }
+
+    .chat-sidebar {
+        width: 300px;
+        background: rgba(15, 17, 26, 0.85);
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        gap: 20px;
+    }
+
+    .chat-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: transparent;
+    }
+
+    .chat-header {
+        padding: 16px 24px;
+        background: rgba(15, 17, 26, 0.6);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* Bubbles */
+    .msg-group {
+        display: flex;
+        flex-direction: column;
+        max-width: 80%;
+    }
+
+    .msg-group.user {
+        align-self: flex-end;
+    }
+
+    .msg-group.other {
+        align-self: flex-start;
+    }
+
+    .msg-author {
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: var(--text-muted);
+    }
+
+    .msg-group.user .msg-author {
+        text-align: right;
+        color: var(--accent-purple);
+    }
+
+    .msg-bubble {
+        padding: 14px 18px;
+        border-radius: 16px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .msg-group.user .msg-bubble {
+        background: var(--user-msg);
+        border: 1px solid var(--user-border);
+        border-bottom-right-radius: 4px;
+    }
+
+    .msg-group.other .msg-bubble {
+        background: var(--bot-msg);
+        border: 1px solid var(--bot-border);
+        border-bottom-left-radius: 4px;
+    }
+
+    .participant-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .input-bar-container {
+        padding: 16px 24px 24px;
+    }
+
+    .status-banner {
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        text-align: center;
+        margin-bottom: 12px;
+    }
+
+    @media (max-width: 768px) {
+        .chat-sidebar { display: none; }
+        .msg-group { max-width: 92%; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="rp-card">
-    <div class="d-flex justify-content-between align-items-start mb-3">
+<div class="chat-layout">
+    <!-- Sidebar -->
+    <aside class="chat-sidebar">
         <div>
-            <h1 style="margin-bottom:4px">{{ room.character_name }}</h1>
-            <div class="text-muted">Ты: <strong>{{ participant.name }}</strong></div>
+            <span class="text-uppercase text-muted fw-bold" style="font-size: 0.72rem; letter-spacing: 1px;">Персонаж ИИ</span>
+            <h5 class="fw-bold mt-1 text-purple" style="color: var(--accent-purple);">{{ room.character_name }}</h5>
         </div>
-        <div class="text-end">
-            <div class="text-muted" style="font-size:0.9rem">Ссылка для друзей:</div>
-            <code id="invite-link">{{ request.url_root }}rp/{{ room.id }}</code>
-        </div>
-    </div>
 
-    <div class="mb-2 d-flex justify-content-between align-items-center">
-        <div id="participants" class="text-muted" style="font-size:0.9rem"></div>
-        <form method="post" action="{{ url_for('rooms.lock_room', room_id=room.id) }}" id="lock-form">
-            <input type="hidden" name="locked" id="lock-value" value="{{ '0' if room.locked else '1' }}">
-            <button type="submit" class="btn btn-sm btn-outline-light">
-                {{ "🔓 Открыть для новых" if room.locked else "🔒 Закрыть для новых" }}
-            </button>
-        </form>
-    </div>
-
-    <div id="round-progress" class="text-muted mb-2" style="font-size:0.85rem"></div>
-
-    <div id="messages" style="height:420px; overflow-y:auto; background:#111827; border-radius:10px; padding:16px; margin-bottom:14px;"></div>
-
-    <div id="error-banner" class="alert alert-danger" style="display:none"></div>
-    <div id="turn-banner" class="alert alert-secondary" style="display:none"></div>
-    <div id="retry-banner" class="alert alert-warning d-flex justify-content-between align-items-center" style="display:none">
-        <span>Все написали, но ответ от ИИ не пришёл (была ошибка).</span>
-        <button id="retry-btn" class="btn btn-sm btn-warning">Повторить</button>
-    </div>
-
-    <form id="message-form" class="d-flex" style="gap:8px">
-        <input class="form-control" id="message-input" placeholder="Напиши сообщение..." autocomplete="off">
-        <button class="btn btn-primary" type="submit" id="send-btn">Отправить</button>
-    </form>
-</div>
-
-<script>
-const roomId = "{{ room.id }}";
-const myId = "{{ participant.id }}";
-const myName = "{{ participant.name }}";
-const stateUrl = "{{ url_for('rooms.room_state', room_id=room.id) }}";
-const messageUrl = "{{ url_for('rooms.send_message', room_id=room.id) }}";
-const retryUrl = "{{ url_for('rooms.retry_round', room_id=room.id) }}";
-
-const messagesEl = document.getElementById("messages");
-const participantsEl = document.getElementById("participants");
-const roundProgressEl = document.getElementById("round-progress");
-const turnBannerEl = document.getElementById("turn-banner");
-const errorBannerEl = document.getElementById("error-banner");
-const retryBannerEl = document.getElementById("retry-banner");
-const retryBtn = document.getElementById("retry-btn");
-const form = document.getElementById("message-form");
-const input = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-btn");
-
-let lastMessageCount = -1;
-let stuckSince = null;      // с какого момента раунд выглядит "завершён, но ИИ не ответил"
-
-function showError(msg) {
-    errorBannerEl.textContent = msg;
-    errorBannerEl.style.display = "block";
-    setTimeout(() => { errorBannerEl.style.display = "none"; }, 6000);
-}
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function renderMessages(messages) {
-    if (messages.length === lastMessageCount) return;
-    lastMessageCount = messages.length;
-
-    messagesEl.innerHTML = messages.map(m => {
-        const who = m.author || (m.role === "assistant" ? "Персонаж" : "?");
-        const isMe = m.role === "user" && who === myName;
-        const align = m.role === "assistant" ? "left" : (isMe ? "right" : "left");
-        const bg = m.role === "assistant" ? "#1f2937" : (isMe ? "#2563eb" : "#374151");
-        return `<div style="text-align:${align}; margin-bottom:10px;">
-            <div style="display:inline-block; max-width:80%; background:${bg}; padding:8px 12px; border-radius:10px; text-align:left;">
-                <div style="font-size:0.75rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(who)}</div>
-                <div style="white-space:pre-wrap;">${escapeHtml(m.content)}</div>
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-uppercase text-muted fw-bold" style="font-size: 0.72rem; letter-spacing: 1px;">Участники</span>
+                <span class="badge bg-secondary rounded-pill" id="participant-count">0</span>
             </div>
-        </div>`;
-    }).join("");
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-}
+            <div class="d-flex flex-column gap-2" id="participants-list">
+                <!-- Заполняется из /state -->
+            </div>
+        </div>
+    </aside>
 
-function renderParticipants(participants, currentTurn) {
-    participantsEl.innerHTML = "Участники: " + participants.map(p => {
-        const marker = p.id === currentTurn ? " ✍️" : "";
-        const title = p.persona ? ` title="${escapeHtml(p.persona)}"` : "";
-        return `<span${title} style="cursor:${p.persona ? "help" : "default"}">${escapeHtml(p.name)}${marker}</span>`;
-    }).join(", ");
-}
+    <!-- Main Chat Area -->
+    <section class="chat-main">
+        <header class="chat-header">
+            <div>
+                <h5 class="mb-0 fw-bold">{{ room.character_name }}</h5>
+                <small class="text-muted" id="turn-indicator">Загрузка состояния...</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-custom" onclick="copyInviteLink()" title="Скопировать ссылку">
+                    <i class="bi bi-person-plus me-1"></i> Пригласить
+                </button>
+                <form action="/rp/{{ room_id }}/lock" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-outline-custom">
+                        <i class="bi bi-lock me-1"></i> {% if room.locked %}Заблокировано{% else %}Заблокировать{% endif %}
+                    </button>
+                </form>
+            </div>
+        </header>
 
-function renderRoundProgress(participants, roundSubmitted) {
-    const total = participants.length;
-    const done = roundSubmitted.length;
-    if (total === 0) {
-        roundProgressEl.textContent = "";
-        return;
+        <!-- Messages -->
+        <div class="messages-container" id="messages">
+            <!-- Сообщения генерируются из JS -->
+        </div>
+
+        <!-- Input Form -->
+        <div class="input-bar-container">
+            <div id="status-banner" class="status-banner d-none"></div>
+
+            <form id="msg-form" onsubmit="sendMessage(event)" class="d-flex gap-2">
+                <textarea id="msg-input" class="form-control" rows="1" placeholder="Напишите ваш ход..." required style="resize: none;"></textarea>
+                <button type="submit" id="send-btn" class="btn btn-purple d-flex align-items-center justify-content-center" style="width: 50px;">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </form>
+
+            <form id="retry-form" action="/rp/{{ room_id }}/retry" method="POST" class="mt-2 d-none">
+                <button type="submit" class="btn btn-sm btn-outline-warning w-100">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> ИИ задерживается. Повторить генерацию?
+                </button>
+            </form>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const roomId = "{{ room_id }}";
+    let lastState = null;
+
+    async function fetchState() {
+        try {
+            const res = await fetch(`/rp/${roomId}/state`);
+            if (!res.ok) return;
+            const data = await res.json();
+            renderState(data);
+        } catch (e) {
+            console.error("Ошибка обновления:", e);
+        }
     }
-    roundProgressEl.textContent = `Раунд: написали ${done} из ${total}`;
-}
 
-function updateTurnUI(currentTurn, participants, roundSubmitted) {
-    const myTurn = currentTurn === myId;
-    const roundFullySubmitted = participants.length > 0 && roundSubmitted.length >= participants.length;
+    function renderState(data) {
+        lastState = data;
+        
+        // Рендер участников
+        const pList = document.getElementById('participants-list');
+        document.getElementById('participant-count').innerText = data.participants.length;
+        pList.innerHTML = data.participants.map(p => {
+            const submitted = data.round_submitted.includes(p.id);
+            return `
+                <div class="participant-card">
+                    <span class="fw-medium">${escapeHtml(p.name)}</span>
+                    <span class="fs-6">${submitted ? '✅' : '✍️'}</span>
+                </div>
+            `;
+        }).join('');
 
-    input.disabled = !myTurn;
-    sendBtn.disabled = !myTurn;
+        // Индикатор ходов
+        const turnInd = document.getElementById('turn-indicator');
+        const statusBanner = document.getElementById('status-banner');
+        const input = document.getElementById('msg-input');
+        const sendBtn = document.getElementById('send-btn');
 
-    if (roundFullySubmitted) {
-        // все написали — ждём ответа ИИ. Если это затянулось, покажем "Повторить".
-        turnBannerEl.style.display = "block";
-        turnBannerEl.textContent = "Все написали — персонаж обдумывает ответ...";
-        if (stuckSince === null) stuckSince = Date.now();
-        retryBannerEl.style.display = (Date.now() - stuckSince > 8000) ? "flex" : "none";
-    } else {
-        stuckSince = null;
-        retryBannerEl.style.display = "none";
-        if (myTurn) {
-            turnBannerEl.style.display = "none";
-            input.placeholder = "Твоя очередь — напиши сообщение...";
+        if (data.is_my_turn) {
+            turnInd.innerText = "Ваш ход!";
+            statusBanner.classList.add('d-none');
+            input.disabled = false;
+            sendBtn.disabled = false;
         } else {
-            turnBannerEl.style.display = "block";
-            turnBannerEl.textContent = "Ждём сообщение от другого участника...";
+            turnInd.innerText = `Ждём ход: ${data.current_turn_name || 'другого игрока'}`;
+            statusBanner.className = "status-banner bg-warning text-dark";
+            statusBanner.innerText = `Сейчас ходит ${data.current_turn_name || 'другой участник'}...`;
+            statusBanner.classList.remove('d-none');
+            input.disabled = true;
+            sendBtn.disabled = true;
+        }
+
+        // Сообщения
+        const msgBox = document.getElementById('messages');
+        const isAtBottom = msgBox.scrollHeight - msgBox.clientHeight <= msgBox.scrollTop + 50;
+
+        msgBox.innerHTML = data.messages.map(m => {
+            const isUser = m.role === 'user';
+            return `
+                <div class="msg-group ${isUser ? 'user' : 'other'}">
+                    <span class="msg-author">${escapeHtml(m.author || (isUser ? 'Вы' : data.character_name))}</span>
+                    <div class="msg-bubble">${escapeHtml(m.content)}</div>
+                </div>
+            `;
+        }).join('');
+
+        if (isAtBottom) {
+            msgBox.scrollTop = msgBox.scrollHeight;
         }
     }
-}
 
-async function poll() {
-    try {
-        const res = await fetch(stateUrl);
-        const data = await res.json();
-        renderMessages(data.messages);
-        renderParticipants(data.participants, data.current_turn);
-        renderRoundProgress(data.participants, data.round_submitted);
-        updateTurnUI(data.current_turn, data.participants, data.round_submitted);
-    } catch (e) {
-        console.error("poll failed", e);
-    }
-}
+    async function sendMessage(e) {
+        e.preventDefault();
+        const input = document.getElementById('msg-input');
+        const text = input.value.trim();
+        if (!text) return;
 
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const text = input.value.trim();
-    if (!text) return;
-
-    sendBtn.disabled = true;
-    const body = new URLSearchParams();
-    body.append("message", text);
-
-    try {
-        const res = await fetch(messageUrl, { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok) {
-            showError(data.error || "Не удалось отправить сообщение");
-        } else {
-            input.value = "";
+        input.value = '';
+        try {
+            await fetch(`/rp/${roomId}/message`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({content: text})
+            });
+            fetchState();
+        } catch (err) {
+            alert("Ошибка отправки сообщения");
         }
-    } catch (e) {
-        showError("Ошибка сети при отправке");
     }
-    await poll();
-});
 
-retryBtn.addEventListener("click", async () => {
-    retryBtn.disabled = true;
-    try {
-        const res = await fetch(retryUrl, { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) {
-            showError(data.error || "Не удалось повторить запрос");
-        }
-    } catch (e) {
-        showError("Ошибка сети при повторе");
+    function copyInviteLink() {
+        navigator.clipboard.writeText(window.location.href);
+        alert("Ссылка на комнату скопирована!");
     }
-    retryBtn.disabled = false;
-    await poll();
-});
 
-poll();
-setInterval(poll, 2000);
+    function escapeHtml(str) {
+        return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    setInterval(fetchState, 2000);
+    fetchState();
 </script>
 {% endblock %}
