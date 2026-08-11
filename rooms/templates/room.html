@@ -122,6 +122,30 @@
         margin-bottom: 12px;
     }
 
+    /* Стили автономного модального окна */
+    .custom-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
+
+    .custom-modal {
+        background: #1a1d2d;
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 24px;
+        width: 90%;
+        max-width: 480px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
     @media (max-width: 768px) {
         .chat-sidebar { display: none; }
         .msg-group { max-width: 92%; }
@@ -157,7 +181,7 @@
                 <small class="text-muted" id="turn-indicator">Загрузка состояния...</small>
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-custom" data-bs-toggle="modal" data-bs-target="#apiKeyModal" title="Изменить API-ключ">
+                <button class="btn btn-sm btn-outline-custom" onclick="openApiKeyModal()" title="Изменить API-ключ">
                     <i class="bi bi-key me-1"></i> API Ключ
                 </button>
                 <button class="btn btn-sm btn-outline-custom" onclick="copyInviteLink()" title="Скопировать ссылку">
@@ -197,25 +221,23 @@
 </div>
 
 <!-- Модальное окно смены API-ключа -->
-<div class="modal fade" id="apiKeyModal" tabindex="-1" aria-labelledby="apiKeyModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-light border-secondary">
-            <div class="modal-header border-secondary">
-                <h5 class="modal-title" id="apiKeyModalLabel"><i class="bi bi-key me-2"></i>Изменить Gemini API Ключ</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="/rp/{{ room['id'] }}/api_key" method="POST">
-                <div class="modal-body">
-                    <label for="api_key_input" class="form-label text-muted">Новый API-ключ Gemini:</label>
-                    <input type="password" class="form-control bg-secondary text-light border-0" id="api_key_input" name="api_key" placeholder="AIzaSy..." required>
-                    <small class="text-muted mt-2 d-block">Ключ будет сохранён для этой комнаты без перезапуска сессии.</small>
-                </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-purple">Сохранить</button>
-                </div>
-            </form>
+<div class="custom-modal-overlay d-none" id="apiKeyModal">
+    <div class="custom-modal">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 fw-bold"><i class="bi bi-key me-2"></i>Изменить Gemini API Ключ</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closeApiKeyModal()"></button>
         </div>
+        <form action="/rp/{{ room['id'] }}/api_key" method="POST">
+            <div class="mb-3">
+                <label for="api_key_input" class="form-label text-muted">Новый API-ключ Gemini:</label>
+                <input type="password" class="form-control bg-secondary text-light border-0" id="api_key_input" name="api_key" placeholder="AIzaSy..." required>
+                <small class="text-muted mt-2 d-block">Ключ сохранится для этой комнаты без перезапуска сессии.</small>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" onclick="closeApiKeyModal()">Отмена</button>
+                <button type="submit" class="btn btn-purple">Сохранить</button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}
@@ -225,6 +247,14 @@
     const roomId = "{{ room['id'] }}";
     const myParticipantId = "{{ participant['id'] }}";
     let lastState = null;
+
+    function openApiKeyModal() {
+        document.getElementById('apiKeyModal').classList.remove('d-none');
+    }
+
+    function closeApiKeyModal() {
+        document.getElementById('apiKeyModal').classList.add('d-none');
+    }
 
     async function fetchState() {
         try {
