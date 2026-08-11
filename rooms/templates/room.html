@@ -201,6 +201,9 @@
                 <small class="text-muted" id="turn-indicator">Загрузка состояния...</small>
             </div>
             <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-custom" onclick="openPersonaModal()" title="Изменить персонажа">
+                    <i class="bi bi-person-gear me-1"></i> Персонаж
+                </button>
                 <button class="btn btn-sm btn-outline-custom" onclick="openApiKeyModal()" title="Изменить API-ключ">
                     <i class="bi bi-key me-1"></i> API Ключ
                 </button>
@@ -246,6 +249,33 @@
     </section>
 </div>
 
+<!-- Модальное окно изменения информации о персонаже -->
+<div class="custom-modal-overlay d-none" id="personaModal">
+    <div class="custom-modal">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 fw-bold text-light">
+                <i class="bi bi-person-gear me-2" style="color: var(--accent-purple);"></i>Изменить персонажа
+            </h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePersonaModal()"></button>
+        </div>
+        <form action="/rp/{{ room['id'] }}/participant" method="POST">
+            <div class="mb-3">
+                <label for="persona_name_input" class="form-label text-light opacity-75">Имя персонажа:</label>
+                <input type="text" class="form-control custom-input" id="persona_name_input" name="name" value="{{ participant.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="persona_desc_input" class="form-label text-light opacity-75">Описание / Персона (для ИИ):</label>
+                <textarea class="form-control custom-input" id="persona_desc_input" name="persona" rows="3" placeholder="Характер, внешность, особенности...">{{ participant.persona }}</textarea>
+                <small class="text-light opacity-50 mt-2 d-block">ИИ учтёт новые данные о вашем персонаже при сгенерированном ответе.</small>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="button" class="btn btn-secondary" onclick="closePersonaModal()">Отмена</button>
+                <button type="submit" class="btn btn-purple">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Модальное окно смены API-ключа -->
 <div class="custom-modal-overlay d-none" id="apiKeyModal">
     <div class="custom-modal">
@@ -275,6 +305,14 @@
     const roomId = "{{ room['id'] }}";
     const myParticipantId = "{{ participant['id'] }}";
     let lastState = null;
+
+    function openPersonaModal() {
+        document.getElementById('personaModal').classList.remove('d-none');
+    }
+
+    function closePersonaModal() {
+        document.getElementById('personaModal').classList.add('d-none');
+    }
 
     function openApiKeyModal() {
         document.getElementById('apiKeyModal').classList.remove('d-none');
