@@ -1,31 +1,27 @@
 {% extends "rp_base.html" %}
-{% block title %}Присоединиться — {{ room.character_name }}{% endblock %}
+{% block title %}Вход в комнату — Proxi RP{% endblock %}
+
 {% block content %}
-<div class="rp-card">
-    <h1>{{ room.character_name }}</h1>
-    <p class="text-muted">Участников сейчас: {{ room.participants|length }}</p>
+<div class="container py-5 d-flex justify-content-center align-items-center flex-grow-1">
+    <div class="rp-card p-4 p-md-5 w-100" style="max-width: 500px;">
+        <h4 class="fw-bold mb-1">Присоединиться к игре</h4>
+        <p class="text-muted mb-4">Заполните анкету вашего персонажа для входа.</p>
 
-    {% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
-    {% endif %}
+        <form action="/rp/{{ room_id }}/join" method="POST" class="d-flex flex-column gap-3">
+            <div>
+                <label class="form-label">Ваше имя / Имя персонажа</label>
+                <input type="text" name="name" class="form-control" placeholder="Например: Рыцарь Артур" required>
+            </div>
 
-    {% if room.locked %}
-    <div class="alert alert-warning">Эта комната закрыта для новых участников.</div>
-    {% else %}
-    <form method="post" action="{{ url_for('rooms.join_room', room_id=room.id) }}">
-        <div class="mb-3">
-            <label class="form-label">Твоё имя в этом чате</label>
-            <input class="form-control" name="name" placeholder="Как тебя называть в RP" required>
-        </div>
+            <div>
+                <label class="form-label">Анкета / Описание вашего персонажа</label>
+                <textarea name="persona" class="form-control" rows="3" placeholder="Расскажите об экипировке, способностях и внешности вашeго героя..."></textarea>
+            </div>
 
-        <div class="mb-3">
-            <label class="form-label">Опиши своего персонажа</label>
-            <textarea class="form-control" name="persona" rows="5"
-                placeholder="Кто твой герой, как выглядит, характер, роль в истории... (необязательно, но поможет ИИ лучше отыгрывать сцены с твоим участием)"></textarea>
-        </div>
-
-        <button class="btn btn-primary" type="submit">Присоединиться</button>
-    </form>
-    {% endif %}
+            <button type="submit" class="btn btn-purple w-100 mt-2">
+                <i class="bi bi-box-arrow-in-right me-2"></i> Войти в комнату
+            </button>
+        </form>
+    </div>
 </div>
 {% endblock %}
