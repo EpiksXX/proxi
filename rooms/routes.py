@@ -295,3 +295,22 @@ def list_rooms_page():
     """Отображает страницу со списком всех созданных комнат."""
     all_rooms = storage.list_rooms()
     return render_template("list_rooms.html", rooms=all_rooms)
+
+
+@rooms.route("/<room_id>/participant", methods=["POST"])
+def update_participant_info(room_id):
+    """Маршрут для обновления информации о персонаже игрока."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    participant = _current_participant(room)
+    if not participant:
+        return jsonify({"error": "Участник не найден"}), 403
+
+    name = request.form.get("name", "").strip() or participant["name"]
+    persona = request.form.get("persona", "").strip()
+
+    storage.update_participant(room_id, participant["id"], name, persona)
+
+    return redirect(url_for("rooms.room_page", room_id=room_id))
