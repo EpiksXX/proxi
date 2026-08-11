@@ -282,3 +282,10 @@ def lock_room(room_id):
     locked = request.form.get("locked") == "1"
     storage.set_locked(room_id, locked)
     return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
+@rooms.route("/list")
+def list_rooms_page():
+    """Отображает страницу со списком всех созданных комнат."""
+    all_rooms = storage.list_rooms()
+    return render_template("list_rooms.html", rooms=all_rooms)
