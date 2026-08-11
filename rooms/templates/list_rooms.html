@@ -4,8 +4,11 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold m-0 text-light"><i class="bi bi-chat-square-text me-2"></i>Мои комнаты</h3>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h3 class="fw-bold m-0 text-light d-flex align-items-center">
+            <i class="bi bi-chat-square-text text-purple fs-2" style="color: var(--accent-purple); margin-right: 12px; display: inline-block;"></i>
+            <span>Мои комнаты</span>
+        </h3>
         <a href="/rp/new" class="btn btn-purple">
             <i class="bi bi-plus-lg me-1"></i> Создать новый чат
         </a>
@@ -23,24 +26,27 @@
             {% for r in rooms %}
                 <div class="col-md-6 col-lg-4">
                     <div class="card bg-dark text-light border-secondary h-100 shadow-sm">
-                        <div class="card-body d-flex flex-column justify-content-between">
+                        <div class="card-body d-flex flex-column justify-content-between p-3">
                             <div>
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h5 class="card-title fw-bold text-purple m-0" style="color: var(--accent-purple);">{{ r.character_name }}</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h5 class="card-title fw-bold m-0" style="color: var(--accent-purple);">{{ r.character_name }}</h5>
                                     {% if r.locked %}
                                         <span class="badge bg-danger">Заблокирована</span>
                                     {% else %}
                                         <span class="badge bg-success">Открыта</span>
                                     {% endif %}
                                 </div>
-                                <p class="card-text text-muted small mb-3">
-                                    ID: <code>{{ r.id }}</code><br>
-                                    Участников: {{ r.participants|length }} | Сообщений: {{ r.messages|length }}
-                                </p>
+                                <div class="text-muted small mb-3">
+                                    <div class="mb-2">ID: <code class="text-light opacity-75">{{ r.id }}</code></div>
+                                    <div class="d-flex gap-3 text-secondary flex-wrap">
+                                        <span><i class="bi bi-people me-1"></i>Участников: {{ r.participants|length }}</span>
+                                        <span><i class="bi bi-chat-dots me-1"></i>Сообщений: {{ r.messages|length }}</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="d-flex gap-2 mt-3">
-                                <a href="/rp/{{ r.id }}" class="btn btn-sm btn-purple flex-grow-1">
-                                    <i class="bi bi-box-arrow-in-right me-1"></i> Войти в чат
+                            <div class="d-flex gap-2 mt-2">
+                                <a href="/rp/{{ r.id }}" class="btn btn-sm btn-purple flex-grow-1 d-flex align-items-center justify-content-center gap-1">
+                                    <i class="bi bi-box-arrow-in-right"></i> Войти в чат
                                 </a>
                                 <form action="/rp/{{ r.id }}/delete" method="POST" onsubmit="return confirm('Удалить эту комнату безвозвратно?');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
