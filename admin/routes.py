@@ -1,284 +1,418 @@
-import os
+import json
 
-import requests
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, make_response
-from tenacity import retry, stop_after_attempt, wait_exponential
+from flask import Blueprint, render_template, request, redirect, url_for
 
-import rooms_storage as storage
-from admin.lore_engine import build_augmented_system_prompt
+from admin import storage
+from admin.lore_engine import source_code
 
-rooms = Blueprint(
-    "rooms",
+admin = Blueprint(
+    "admin",
     __name__,
     template_folder="templates",
     static_folder="static",
-    url_prefix="/rp",
+    url_prefix="/admin"
 )
 
-MODEL = "gemini-3-flash-preview"
-VISITOR_COOKIE = "rp_visitor_id"
 
-
-class _Msg:
-    """
-    Лёгкая обёртка вокруг сообщения комнаты — build_augmented_system_prompt
-    (движок лорбуков/плагинов) читает только атрибут .content, поэтому
-    полноценная Pydantic-модель ChatRequest.Message тут не нужна.
-    """
-    def __init__(self, content):
-        self.content = content
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-def _call_gemini(system_prompt, contents, api_key, temperature, max_tokens):
-    api_url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{MODEL}:generateContent?key={api_key}"
+@admin.route("/")
+def dashboard():
+    return render_template(
+        "dashboard.html",
+        lorebooks_count=len(storage.list_lorebooks()),
+        plugins_count=len(storage.list_plugins()),
     )
-    payload = {
-        "contents": contents,
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": max_tokens,
-        },
-    }
-    if system_prompt:
-        payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
-
-    response = requests.post(api_url, json=payload, timeout=120)
-    if response.status_code != 200:
-        raise RuntimeError(f"Gemini returned {response.status_code}: {response.text}")
-
-    data = response.json()
-    if "candidates" not in data:
-        raise RuntimeError(f"Unexpected Gemini response: {data}")
-
-    return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _get_cookie_name(room_id):
-    """Формирует уникальное имя Cookie для каждой комнаты."""
-    return f"{VISITOR_COOKIE}_{room_id}"
+# ---------------- Lorebooks ----------------
+
+@admin.route("/lorebooks")
+def lorebooks_list():
+    entries = storage.list_lorebooks()
+
+    groups_map = {}
+    for e in entries:
+        src = e.get("source") or "Без источника"
+        groups_map.setdefault(src, []).append(e)
+
+    groups = []
+    for src in sorted(groups_map.keys(), key=lambda s: s.lower()):
+        group_entries = groups_map[src]
+        groups.append({
+            "source": src,
+            "code": source_code(src),
+            "entries": group_entries,
+            "total": len(group_entries),
+            "enabled_count": sum(1 for e in group_entries if e.get("enabled", True)),
+        })
+
+    return render_template(
+        "lorebooks.html",
+        groups=groups,
+        imported=request.args.get("imported"),
+        open_source=request.args.get("open", ""),
+    )
 
 
-def _current_participant(room):
-    """
-    Получает текущего участника.
-    Сначала проверяется Cookie конкретной комнаты, затем общий Cookie.
-    """
-    cookie_name = _get_cookie_name(room["id"])
-    visitor_id = request.cookies.get(cookie_name) or request.cookies.get(VISITOR_COOKIE)
-    if not visitor_id:
-        return None
-    return next((p for p in room["participants"] if p["id"] == visitor_id), None)
+@admin.route("/lorebooks/bulk-delete", methods=["POST"])
+def lorebooks_bulk_delete():
+    source = request.form.get("source", "")
+    if source:
+        storage.delete_lorebooks_by_source(source)
+    return redirect(url_for("admin.lorebooks_list"))
 
 
-def _current_turn(room):
-    """Первый участник (по порядку присоединения), кто ещё не написал в этом раунде."""
-    submitted = set(room.get("round_submitted", []))
-    for p in room["participants"]:
-        if p["id"] not in submitted:
-            return p
-    return None  # все уже написали — раунд обрабатывается / комната без участников
+@admin.route("/lorebooks/bulk-toggle", methods=["POST"])
+def lorebooks_bulk_toggle():
+    source = request.form.get("source", "")
+    enabled = request.form.get("enabled") == "1"
+    if source:
+        storage.set_enabled_by_source(source, enabled)
+    return redirect(url_for("admin.lorebooks_list", open=source))
 
 
-def _build_final_system_prompt(room):
-    """
-    Собирает системный промпт для запроса к Gemini: сначала прогоняет базовый
-    системный промпт комнаты через движок лорбуков/плагинов (<LOREBOOK=...>,
-    <PLUGIN=...>), затем добавляет описания персонажей всех участников —
-    чтобы ИИ понимал, кто есть кто в общем чате.
-    """
-    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
-    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
-
-    persona_lines = [
-        f"— {p['name']}: {p['persona']}"
-        for p in room["participants"]
-        if p.get("persona")
-    ]
-    if persona_lines:
-        persona_block = "\n".join(persona_lines)
-        system_prompt = (
-            f"{system_prompt}\n\n[Персонажи участников]\n{persona_block}"
-            if system_prompt else f"[Персонажи участников]\n{persona_block}"
-        )
-
-    return system_prompt
-
-
-@rooms.route("/new", methods=["GET", "POST"])
-def new_room():
+@admin.route("/lorebooks/import", methods=["GET", "POST"])
+def lorebooks_import():
     if request.method == "POST":
-        character_name = request.form.get("character_name", "").strip() or "Персонаж"
-        system_prompt = request.form.get("system_prompt", "").strip()
-        api_key = request.form.get("api_key", "").strip() or os.environ.get("GEMINI_API_KEY", "")
-        temperature = float(request.form.get("temperature") or 1.0)
-        max_tokens = int(request.form.get("max_tokens") or 2000)
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return render_template("lorebook_import.html", error="Файл не выбран.")
 
-        room = storage.create_room(character_name, system_prompt, api_key, temperature, max_tokens)
-        return redirect(url_for("rooms.room_page", room_id=room["id"]))
+        try:
+            raw = file.read().decode("utf-8")
+            data = json.loads(raw)
+        except UnicodeDecodeError:
+            return render_template("lorebook_import.html", error="Не удалось прочитать файл (неверная кодировка).")
+        except json.JSONDecodeError:
+            return render_template("lorebook_import.html", error="Файл не является корректным JSON.")
 
-    return render_template("new_room.html")
+        if isinstance(data, dict) and "entries" in data:
+            source_name = data.get("name") or file.filename
+            new_entries = _convert_sillytavern_lorebook(data, source_name)
+        elif isinstance(data, list):
+            source_name = file.filename
+            new_entries = _convert_own_format_lorebook(data, source_name)
+        else:
+            return render_template(
+                "lorebook_import.html",
+                error="Формат файла не распознан. Ожидается экспорт SillyTavern/World Info "
+                      "(объект с полем 'entries') или список записей в формате этой панели.",
+            )
 
+        if not new_entries:
+            return render_template("lorebook_import.html", error="В файле не найдено ни одной записи.")
 
-@rooms.route("/<room_id>")
-def room_page(room_id):
-    room = storage.get_room(room_id)
-    if not room:
-        return render_template("room_not_found.html"), 404
+        for entry in new_entries:
+            storage.save_lorebook(entry)
 
-    participant = _current_participant(room)
-    if not participant:
-        return render_template("join_room.html", room=room, error=None)
+        return redirect(url_for("admin.lorebooks_list", imported=len(new_entries)))
 
-    return render_template("room.html", room=room, participant=participant)
-
-
-@rooms.route("/<room_id>/join", methods=["POST"])
-def join_room(room_id):
-    name = request.form.get("name", "").strip()
-    persona = request.form.get("persona", "").strip()
-    room = storage.get_room(room_id)
-    if not room:
-        return render_template("room_not_found.html"), 404
-
-    if not name:
-        return render_template("join_room.html", room=room, error="Введи имя, чтобы присоединиться.")
-
-    room, participant = storage.add_participant(room_id, name, persona)
-    if participant is None:
-        return render_template("join_room.html", room=room, error="Комната закрыта для новых участников.")
-
-    resp = make_response(redirect(url_for("rooms.room_page", room_id=room_id)))
-    
-    cookie_name = _get_cookie_name(room_id)
-    resp.set_cookie(cookie_name, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
-    resp.set_cookie(VISITOR_COOKIE, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
-    
-    return resp
+    return render_template("lorebook_import.html", error=None)
 
 
-@rooms.route("/<room_id>/api_key", methods=["POST"])
-def update_api_key(room_id):
-    """Обновление API-ключа комнаты прямо из чата."""
-    room = storage.get_room(room_id)
-    if not room:
-        return jsonify({"error": "Комната не найдена"}), 404
-
-    api_key = request.form.get("api_key", "").strip()
-    storage.update_api_key(room_id, api_key)
-
-    return redirect(url_for("rooms.room_page", room_id=room_id))
-
-
-@rooms.route("/<room_id>/delete", methods=["POST"])
-def delete_room(room_id):
-    """Удаление комнаты и перенаправление на создание нового чата."""
-    storage.delete_room(room_id)
-    return redirect(url_for("rooms.new_room"))
-
-
-@rooms.route("/<room_id>/state")
-def room_state(room_id):
-    room = storage.get_room(room_id)
-    if not room:
-        return jsonify({"error": "not found"}), 404
-
-    current_turn = _current_turn(room)
-
-    return jsonify({
-        "character_name": room["character_name"],
-        "messages": room["messages"],
-        "participants": room["participants"],
-        "round_submitted": room.get("round_submitted", []),
-        "current_turn": current_turn["id"] if current_turn else None,
-        "locked": room["locked"],
-    })
+def _convert_sillytavern_lorebook(data, source_name="Импортированный лорбук"):
+    """Конвертирует экспорт SillyTavern / World Info в формат этой панели."""
+    result = []
+    for entry in data.get("entries", {}).values():
+        enabled = not entry.get("disable", False)
+        # constant=true в SillyTavern значит "вставлять всегда" — у нас это
+        # соответствует пустому списку ключевых слов
+        keywords = [] if entry.get("constant") else list(entry.get("key", []))
+        name = entry.get("comment") or (keywords[0] if keywords else f"entry-{entry.get('uid', '')}")
+        result.append({
+            "id": None,
+            "name": name,
+            "keywords": keywords,
+            "content": entry.get("content", ""),
+            "priority": entry.get("order", 0),
+            "case_sensitive": False,
+            "enabled": enabled,
+            "source": source_name,
+        })
+    return result
 
 
-@rooms.route("/<room_id>/message", methods=["POST"])
-def send_message(room_id):
-    room = storage.get_room(room_id)
-    if not room:
-        return jsonify({"error": "Комната не найдена"}), 404
-
-    participant = _current_participant(room)
-    if not participant:
-        return jsonify({"error": "Сначала присоединись к комнате"}), 403
-
-    current = _current_turn(room)
-    if not current or current["id"] != participant["id"]:
-        name = current["name"] if current else "—"
-        return jsonify({"error": f"Сейчас очередь: {name}"}), 403
-
-    text = request.form.get("message", "").strip()
-    if not text:
-        return jsonify({"error": "Пустое сообщение"}), 400
-
-    if not room.get("api_key"):
-        return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
-
-    storage.append_message(room_id, "user", f"{participant['name']}: {text}", author=participant["name"])
-    room = storage.mark_submitted(room_id, participant["id"])
-
-    if len(room["round_submitted"]) < len(room["participants"]):
-        return jsonify({"ok": True, "round_complete": False})
-
-    system_prompt = _build_final_system_prompt(room)
-
-    contents = []
-    for m in room["messages"]:
-        role = "model" if m["role"] == "assistant" else "user"
-        contents.append({"role": role, "parts": [{"text": m["content"]}]})
-
-    try:
-        reply_text = _call_gemini(
-            system_prompt, contents, room["api_key"], room["temperature"], room["max_tokens"]
-        )
-    except Exception as e:
-        return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
-
-    storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
-    storage.reset_round(room_id)
-
-    return jsonify({"ok": True, "round_complete": True})
+def _convert_own_format_lorebook(data, source_name="Импортированный лорбук"):
+    """Принимает список записей уже в формате этой панели (например, экспортированный ранее)."""
+    result = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        result.append({
+            "id": None,  # всегда создаём как новую запись, чтобы не перезатереть существующую по id
+            "name": entry.get("name", "Без названия"),
+            "keywords": entry.get("keywords", []),
+            "content": entry.get("content", ""),
+            "priority": entry.get("priority", 0),
+            "case_sensitive": entry.get("case_sensitive", False),
+            "enabled": entry.get("enabled", True),
+            "source": entry.get("source") or source_name,
+        })
+    return result
 
 
-@rooms.route("/<room_id>/retry", methods=["POST"])
-def retry_round(room_id):
-    room = storage.get_room(room_id)
-    if not room:
-        return jsonify({"error": "Комната не найдена"}), 404
-
-    if not room["participants"] or len(room["round_submitted"]) < len(room["participants"]):
-        return jsonify({"error": "Раунд ещё не завершён — сначала должны написать все участники"}), 400
-
-    if not room.get("api_key"):
-        return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
-
-    system_prompt = _build_final_system_prompt(room)
-
-    contents = []
-    for m in room["messages"]:
-        role = "model" if m["role"] == "assistant" else "user"
-        contents.append({"role": role, "parts": [{"text": m["content"]}]})
-
-    try:
-        reply_text = _call_gemini(
-            system_prompt, contents, room["api_key"], room["temperature"], room["max_tokens"]
-        )
-    except Exception as e:
-        return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
-
-    storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
-    storage.reset_round(room_id)
-
-    return jsonify({"ok": True})
+@admin.route("/lorebooks/new", methods=["GET", "POST"])
+def lorebooks_new():
+    if request.method == "POST":
+        entry = _entry_from_form(request.form)
+        entry["source"] = "Добавлено вручную"
+        storage.save_lorebook(entry)
+        return redirect(url_for("admin.lorebooks_list"))
+    return render_template("lorebook_edit.html", entry=None)
 
 
-@rooms.route("/<room_id>/lock", methods=["POST"])
-def lock_room(room_id):
-    locked = request.form.get("locked") == "1"
-    storage.set_locked(room_id, locked)
-    return redirect(url_for("rooms.room_page", room_id=room_id))
+@admin.route("/lorebooks/<entry_id>/edit", methods=["GET", "POST"])
+def lorebooks_edit(entry_id):
+    existing = storage.get_lorebook(entry_id)
+    if request.method == "POST":
+        entry = _entry_from_form(request.form, entry_id=entry_id)
+        # сохраняем исходный source (например, название импортированного лорбука),
+        # чтобы редактирование одной записи не выбрасывало её из фильтра/группы
+        entry["source"] = existing.get("source", "Добавлено вручную") if existing else "Добавлено вручную"
+        storage.save_lorebook(entry)
+        return redirect(url_for("admin.lorebooks_list"))
+    return render_template("lorebook_edit.html", entry=existing)
+
+
+@admin.route("/lorebooks/<entry_id>/delete", methods=["POST"])
+def lorebooks_delete(entry_id):
+    entry = storage.get_lorebook(entry_id)
+    source = entry.get("source", "") if entry else ""
+    storage.delete_lorebook(entry_id)
+    return redirect(url_for("admin.lorebooks_list", open=source))
+
+
+@admin.route("/lorebooks/<entry_id>/toggle", methods=["POST"])
+def lorebooks_toggle(entry_id):
+    entry = storage.get_lorebook(entry_id)
+    source = entry.get("source", "") if entry else ""
+    storage.toggle_lorebook(entry_id)
+    return redirect(url_for("admin.lorebooks_list", open=source))
+
+
+def _entry_from_form(form, entry_id=None):
+    return {
+        "id": entry_id,
+        "name": form.get("name", "").strip(),
+        "keywords": [k.strip() for k in form.get("keywords", "").split(",") if k.strip()],
+        "content": form.get("content", "").strip(),
+        "priority": int(form.get("priority") or 0),
+        "case_sensitive": form.get("case_sensitive") == "on",
+        "enabled": form.get("enabled") == "on",
+    }
+
+
+# ---------------- Plugins ----------------
+
+@admin.route("/plugins")
+def plugins_list():
+    plugins = storage.list_plugins()
+
+    groups_map = {}
+    for p in plugins:
+        src = p.get("source") or "Без источника"
+        groups_map.setdefault(src, []).append(p)
+
+    groups = []
+    for src in sorted(groups_map.keys(), key=lambda s: s.lower()):
+        group_plugins = groups_map[src]
+        groups.append({
+            "source": src,
+            "code": source_code(src),
+            "plugins": group_plugins,
+            "total": len(group_plugins),
+            "enabled_count": sum(1 for p in group_plugins if p.get("enabled", True)),
+        })
+
+    return render_template(
+        "plugins.html",
+        groups=groups,
+        imported=request.args.get("imported"),
+        open_source=request.args.get("open", ""),
+    )
+
+
+@admin.route("/plugins/bulk-delete", methods=["POST"])
+def plugins_bulk_delete():
+    source = request.form.get("source", "")
+    if source:
+        storage.delete_plugins_by_source(source)
+    return redirect(url_for("admin.plugins_list"))
+
+
+@admin.route("/plugins/bulk-toggle", methods=["POST"])
+def plugins_bulk_toggle():
+    source = request.form.get("source", "")
+    enabled = request.form.get("enabled") == "1"
+    if source:
+        storage.set_plugins_enabled_by_source(source, enabled)
+    return redirect(url_for("admin.plugins_list", open=source))
+
+
+@admin.route("/plugins/import", methods=["GET", "POST"])
+def plugins_import():
+    if request.method == "POST":
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return render_template("plugin_import.html", error="Файл не выбран.")
+
+        try:
+            raw = file.read().decode("utf-8")
+            data = json.loads(raw)
+        except UnicodeDecodeError:
+            return render_template("plugin_import.html", error="Не удалось прочитать файл (неверная кодировка).")
+        except json.JSONDecodeError:
+            return render_template("plugin_import.html", error="Файл не является корректным JSON.")
+
+        if isinstance(data, dict) and "entries" in data:
+            source_name = data.get("name") or file.filename
+            new_plugins = _convert_lorebary_plugin(data, source_name)
+        elif isinstance(data, list):
+            source_name = file.filename
+            new_plugins = _convert_own_format_plugin(data, source_name)
+        else:
+            return render_template(
+                "plugin_import.html",
+                error="Формат файла не распознан. Ожидается экспорт плагина LoreBary "
+                      "(объект с полем 'entries') или список правил в формате этой панели.",
+            )
+
+        if not new_plugins:
+            return render_template("plugin_import.html", error="В файле не найдено ни одного правила.")
+
+        for plugin in new_plugins:
+            storage.save_plugin(plugin)
+
+        return redirect(url_for("admin.plugins_list", imported=len(new_plugins)))
+
+    return render_template("plugin_import.html", error=None)
+
+
+def _convert_lorebary_plugin(data, source_name="Импортированный плагин"):
+    """
+    Конвертирует экспорт плагина LoreBary (entries с triggerGroups/actions)
+    в формат этой панели.
+    """
+    result = []
+    for entry in data.get("entries", {}).values():
+        name = entry.get("name") or entry.get("comment") or f"entry-{entry.get('uid', '')}"
+
+        trigger_groups = entry.get("triggerGroups") or []
+        tg = trigger_groups[0] if trigger_groups else {}
+        ttype = tg.get("type", "always")
+
+        trigger = "always"
+        keywords = []
+        interval = 0
+        start_after = 0
+
+        if ttype == "keyword":
+            trigger = "keyword"
+            keywords = tg.get("keywords", [])
+        elif ttype == "messageCountInterval":
+            trigger = "interval"
+            interval = tg.get("messageCountInterval", 0)
+            start_after = tg.get("messageCountValue", interval)
+        # неизвестные/прочие типы (chance, variable и т.д.) сводим к "always",
+        # чтобы правило хотя бы не терялось молча
+
+        actions = (entry.get("actions") or {}).get("default", [])
+        pool = []
+        role = "system"
+        for action in actions:
+            pool.extend(action.get("pool", []))
+            role = action.get("role", role)
+
+        result.append({
+            "id": None,
+            "name": name,
+            "source": source_name,
+            "trigger": trigger,
+            "keywords": keywords,
+            "pattern": "",
+            "interval": interval,
+            "start_after": start_after,
+            "pool": pool,
+            "role": role,
+            "enabled": True,
+        })
+    return result
+
+
+def _convert_own_format_plugin(data, source_name="Импортированный плагин"):
+    """Принимает список правил уже в формате этой панели."""
+    result = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        result.append({
+            "id": None,
+            "name": entry.get("name", "Без названия"),
+            "source": entry.get("source") or source_name,
+            "trigger": entry.get("trigger", "always"),
+            "keywords": entry.get("keywords", []),
+            "pattern": entry.get("pattern", ""),
+            "interval": entry.get("interval", 0),
+            "start_after": entry.get("start_after", 0),
+            "pool": entry.get("pool", []),
+            "role": entry.get("role", "system"),
+            "enabled": entry.get("enabled", True),
+        })
+    return result
+
+
+@admin.route("/plugins/new", methods=["GET", "POST"])
+def plugins_new():
+    if request.method == "POST":
+        plugin = _plugin_from_form(request.form)
+        plugin["source"] = f"Ручной: {plugin['name'] or plugin['id'] or 'без названия'}"
+        storage.save_plugin(plugin)
+        return redirect(url_for("admin.plugins_list"))
+    return render_template("plugin_edit.html", plugin=None)
+
+
+@admin.route("/plugins/<plugin_id>/edit", methods=["GET", "POST"])
+def plugins_edit(plugin_id):
+    existing = storage.get_plugin(plugin_id)
+    if request.method == "POST":
+        plugin = _plugin_from_form(request.form, plugin_id=plugin_id)
+        # сохраняем исходный source (например, название импортированного плагина),
+        # чтобы редактирование одного правила не выбрасывало его из группы/тега
+        plugin["source"] = existing.get("source", "Добавлено вручную") if existing else "Добавлено вручную"
+        storage.save_plugin(plugin)
+        return redirect(url_for("admin.plugins_list"))
+    return render_template("plugin_edit.html", plugin=existing)
+
+
+@admin.route("/plugins/<plugin_id>/delete", methods=["POST"])
+def plugins_delete(plugin_id):
+    plugin = storage.get_plugin(plugin_id)
+    source = plugin.get("source", "") if plugin else ""
+    storage.delete_plugin(plugin_id)
+    return redirect(url_for("admin.plugins_list", open=source))
+
+
+@admin.route("/plugins/<plugin_id>/toggle", methods=["POST"])
+def plugins_toggle(plugin_id):
+    plugin = storage.get_plugin(plugin_id)
+    source = plugin.get("source", "") if plugin else ""
+    storage.toggle_plugin(plugin_id)
+    return redirect(url_for("admin.plugins_list", open=source))
+
+
+def _plugin_from_form(form, plugin_id=None):
+    trigger = form.get("trigger", "always")
+    pool_raw = form.get("pool", "")
+    pool = [line.strip() for line in pool_raw.splitlines() if line.strip()]
+
+    return {
+        "id": plugin_id,
+        "name": form.get("name", "").strip(),
+        "trigger": trigger,
+        "keywords": [k.strip() for k in form.get("keywords", "").split(",") if k.strip()],
+        "pattern": form.get("pattern", "").strip(),
+        "interval": int(form.get("interval") or 0),
+        "start_after": int(form.get("start_after") or 0),
+        "pool": pool,
+        "role": form.get("role", "system"),
+        "enabled": form.get("enabled") == "on",
+    }
