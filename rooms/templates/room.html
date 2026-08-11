@@ -92,6 +92,14 @@
         border-bottom-left-radius: 4px;
     }
 
+    /* Стилизация действий/отыгровки в звездочках (*действие* или **действие**) */
+    .rp-action {
+        font-style: italic;
+        color: #c4b5fd;
+        font-family: 'Georgia', 'Times New Roman', serif;
+        opacity: 0.95;
+    }
+
     .participant-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid var(--border-color);
@@ -149,6 +157,9 @@
                 <small class="text-muted" id="turn-indicator">Загрузка состояния...</small>
             </div>
             <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-custom" data-bs-toggle="modal" data-bs-target="#apiKeyModal" title="Изменить API-ключ">
+                    <i class="bi bi-key me-1"></i> API Ключ
+                </button>
                 <button class="btn btn-sm btn-outline-custom" onclick="copyInviteLink()" title="Скопировать ссылку">
                     <i class="bi bi-person-plus me-1"></i> Пригласить
                 </button>
@@ -184,6 +195,29 @@
         </div>
     </section>
 </div>
+
+<!-- Модальное окно смены API-ключа -->
+<div class="modal fade" id="apiKeyModal" tabindex="-1" aria-labelledby="apiKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="apiKeyModalLabel"><i class="bi bi-key me-2"></i>Изменить Gemini API Ключ</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/rp/{{ room['id'] }}/api_key" method="POST">
+                <div class="modal-body">
+                    <label for="api_key_input" class="form-label text-muted">Новый API-ключ Gemini:</label>
+                    <input type="password" class="form-control bg-secondary text-light border-0" id="api_key_input" name="api_key" placeholder="AIzaSy..." required>
+                    <small class="text-muted mt-2 d-block">Ключ будет сохранён для этой комнаты без перезапуска сессии.</small>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-purple">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -201,6 +235,15 @@
         } catch (e) {
             console.error("Ошибка обновления:", e);
         }
+    }
+
+    function formatMessageText(text) {
+        if (!text) return '';
+        let escaped = escapeHtml(text);
+        // Замена **текст** и *текст* на красивый курсивный элемент .rp-action
+        escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<span class="rp-action">$1</span>');
+        escaped = escaped.replace(/\*(.*?)\*/g, '<span class="rp-action">$1</span>');
+        return escaped;
     }
 
     function renderState(data) {
@@ -225,7 +268,6 @@
         const input = document.getElementById('msg-input');
         const sendBtn = document.getElementById('send-btn');
 
-        // Определение активного участника
         const currentParticipant = data.participants.find(p => p.id === data.current_turn);
         const isMyTurn = data.current_turn && data.current_turn === myParticipantId;
         const currentTurnName = currentParticipant ? currentParticipant.name : null;
@@ -236,7 +278,6 @@
             input.disabled = false;
             sendBtn.disabled = false;
         } else if (!data.current_turn) {
-            // Все участники написали, ожидает ответ ИИ
             turnInd.innerText = "Все ответили. Ждём ИИ...";
             statusBanner.className = "status-banner bg-info text-white";
             statusBanner.innerText = "Генерация ответа ИИ...";
@@ -244,7 +285,6 @@
             input.disabled = true;
             sendBtn.disabled = true;
         } else {
-            // Ход другого игрока
             turnInd.innerText = `Ждём ход: ${currentTurnName || 'другого игрока'}`;
             statusBanner.className = "status-banner bg-warning text-dark";
             statusBanner.innerText = `Сейчас ходит ${currentTurnName || 'другой участник'}...`;
@@ -262,7 +302,7 @@
             return `
                 <div class="msg-group ${isUser ? 'user' : 'other'}">
                     <span class="msg-author">${escapeHtml(m.author || (isUser ? 'Вы' : data.character_name))}</span>
-                    <div class="msg-bubble">${escapeHtml(m.content)}</div>
+                    <div class="msg-bubble">${formatMessageText(m.content)}</div>
                 </div>
             `;
         }).join('');
