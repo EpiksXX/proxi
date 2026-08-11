@@ -7,15 +7,22 @@
         <h4 class="fw-bold mb-1">Присоединиться к игре</h4>
         <p class="text-muted mb-4">Заполните анкету вашего персонажа для входа.</p>
 
-        <form action="/rp/{{ room_id }}/join" method="POST" class="d-flex flex-column gap-3">
+        {% if error %}
+        <div class="alert alert-danger py-2 px-3 rounded-3 mb-3" style="font-size: 0.9rem;">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- ИСПРАВЛЕНИЕ: room['id'] вместо room_id -->
+        <form action="/rp/{{ room['id'] }}/join" method="POST" class="d-flex flex-column gap-3">
             <div>
                 <label class="form-label">Ваше имя / Имя персонажа</label>
-                <input type="text" name="name" class="form-control" placeholder="Например: Рыцарь Артур" required>
+                <input type="text" name="name" class="form-control" placeholder="Например: Куро" required autofocus>
             </div>
 
             <div>
                 <label class="form-label">Анкета / Описание вашего персонажа</label>
-                <textarea name="persona" class="form-control" rows="3" placeholder="Расскажите об экипировке, способностях и внешности вашeго героя..."></textarea>
+                <textarea name="persona" class="form-control" rows="3" placeholder="Расскажите об экипировке, способностях и внешности вашего героя..."></textarea>
             </div>
 
             <button type="submit" class="btn btn-purple w-100 mt-2">
