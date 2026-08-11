@@ -1,46 +1,322 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}RP{% endblock %}</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<style>
-    body{
-        margin:0;
-        background:#111827;
-        color:#e5e7eb;
-        font-family:Arial, sans-serif;
-        --bs-body-color:#e5e7eb;
-        --bs-code-color:#7dd3fc;
-        --bs-heading-color:#ffffff;
-    }
-    .rp-page{
-        max-width:720px;
-        margin:40px auto;
-        padding:0 20px;
-    }
-    .rp-card{
-        background:#1f2937;
-        border-radius:12px;
-        padding:28px;
-    }
-    form textarea, form input, form select{
-        background:#111827 !important;
-        color:#e5e7eb !important;
-        border:1px solid #374151 !important;
-    }
-    code{
-        background:#0f172a;
-        color:#7dd3fc;
-        padding:2px 6px;
-        border-radius:4px;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Proxi Chat Room{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0d0e12;
+            --bg-surface: #16171d;
+            --bg-surface-hover: #1f2029;
+            --bg-card: #1c1d24;
+            --border-color: rgba(255, 255, 255, 0.08);
+            
+            --accent-purple: #9d4edd;
+            --accent-purple-glow: rgba(157, 78, 221, 0.25);
+            --accent-gradient: linear-gradient(135deg, #7b2cbf 0%, #9d4edd 100%);
+            
+            --text-primary: #f1f3f9;
+            --text-secondary: #9499b1;
+            --text-muted: #5e637a;
+
+            --user-msg-bg: #221c35;
+            --user-msg-border: rgba(157, 78, 221, 0.3);
+            --bot-msg-bg: #181a22;
+            --bot-msg-border: rgba(255, 255, 255, 0.06);
+
+            --sidebar-width: 280px;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Sidebar Style */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--text-primary);
+        }
+
+        .brand-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: var(--accent-gradient);
+            box-shadow: 0 0 12px var(--accent-purple-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .room-info {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 14px;
+        }
+
+        .room-info h3 {
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .status-online {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #4ade80;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #4ade80;
+            box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+        }
+
+        /* Main Chat Container */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+        }
+
+        .chat-header {
+            height: 64px;
+            padding: 0 24px;
+            background-color: rgba(22, 23, 29, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .messages-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-area::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        /* Message Bubbles */
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 75%;
+            animation: fadeIn 0.25s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-sender {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-muted);
+            padding: 0 4px;
+        }
+
+        .message.user .message-sender {
+            text-align: right;
+            color: var(--accent-purple);
+        }
+
+        .message-bubble {
+            padding: 14px 18px;
+            border-radius: var(--radius-lg);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-bubble {
+            background-color: var(--user-msg-bg);
+            border: 1px solid var(--user-msg-border);
+            border-bottom-right-radius: 4px;
+            color: var(--text-primary);
+        }
+
+        .message.assistant .message-bubble {
+            background-color: var(--bot-msg-bg);
+            border: 1px solid var(--bot-msg-border);
+            border-bottom-left-radius: 4px;
+            color: var(--text-primary);
+        }
+
+        /* Input Bar */
+        .chat-input-area {
+            padding: 16px 24px 24px;
+            background-color: var(--bg-base);
+        }
+
+        .input-wrapper {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 8px 12px 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 16px var(--accent-purple-glow);
+        }
+
+        .chat-textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: none;
+            max-height: 120px;
+        }
+
+        .btn-send {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s, opacity 0.15s;
+            flex-shrink: 0;
+        }
+
+        .btn-send:hover {
+            opacity: 0.9;
+            transform: scale(1.03);
+        }
+
+        .btn-send:active {
+            transform: scale(0.97);
+        }
+
+        /* Mobile Adaptation */
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .message { max-width: 88%; }
+        }
+    </style>
 </head>
 <body>
-<div class="rp-page">
-    {% block content %}{% endblock %}
-</div>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-badge">P</div>
+            <span>Proxi RP</span>
+        </div>
+        <div class="room-info">
+            <h3>{% block room_name %}RP Room{% endblock %}</h3>
+            <div class="status-online">
+                <span class="status-dot"></span> Active Session
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Chat -->
+    <main class="chat-container">
+        <header class="chat-header">
+            <h2>{% block header_title %}Room Chat{% endblock %}</h2>
+        </header>
+
+        <section class="messages-area" id="messages">
+            {% block content %}
+            <!-- Сообщения сессии -->
+            <div class="message assistant">
+                <span class="message-sender">Gemini / AI</span>
+                <div class="message-bubble">
+                    Добро пожаловать в комнату. Введите сообщение, чтобы начать диалог.
+                </div>
+            </div>
+            {% endblock %}
+        </section>
+
+        <footer class="chat-input-area">
+            <form action="" method="POST" class="input-wrapper">
+                <textarea class="chat-textarea" name="message" placeholder="Напишите сообщение..." rows="1" required></textarea>
+                <button type="submit" class="btn-send">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </form>
+        </footer>
+    </main>
 </body>
 </html>
