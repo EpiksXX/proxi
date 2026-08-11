@@ -152,12 +152,30 @@ def join_room(room_id):
 
     resp = make_response(redirect(url_for("rooms.room_page", room_id=room_id)))
     
-    # Установка Cookie с явным указанием path="/" для постоянного сохранения при перезагрузках
     cookie_name = _get_cookie_name(room_id)
     resp.set_cookie(cookie_name, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
     resp.set_cookie(VISITOR_COOKIE, participant["id"], max_age=60 * 60 * 24 * 30, path="/")
     
     return resp
+
+
+@rooms.route("/<room_id>/api_key", methods=["POST"])
+def update_api_key(room_id):
+    """Обновление API-ключа комнаты прямо из чата."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    api_key = request.form.get("api_key", "").strip()
+    
+    if hasattr(storage, "update_api_key"):
+        storage.update_api_key(room_id, api_key)
+    elif hasattr(storage, "set_api_key"):
+        storage.set_api_key(room_id, api_key)
+    else:
+        room["api_key"] = api_key
+
+    return redirect(url_for("rooms.room_page", room_id=room_id))
 
 
 @rooms.route("/<room_id>/state")
@@ -200,18 +218,12 @@ def send_message(room_id):
     if not room.get("api_key"):
         return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
 
-    # Сообщение человека — подписываем именем, чтобы модель различала участников
     storage.append_message(room_id, "user", f"{participant['name']}: {text}", author=participant["name"])
     room = storage.mark_submitted(room_id, participant["id"])
 
-    # Ждём, пока своё сообщение не напишут ВСЕ участники — только после этого
-    # раунд считается завершённым и мы обращаемся к ИИ.
     if len(room["round_submitted"]) < len(room["participants"]):
         return jsonify({"ok": True, "round_complete": False})
 
-    # Раунд завершён — прогоняем всю накопленную историю через движок
-    # лорбуков/плагинов + добавляем персонажей участников, и получаем
-    # один ответ персонажа на весь раунд разом.
     system_prompt = _build_final_system_prompt(room)
 
     contents = []
@@ -224,10 +236,6 @@ def send_message(room_id):
             system_prompt, contents, room["api_key"], room["temperature"], room["max_tokens"]
         )
     except Exception as e:
-        # Раунд НЕ сбрасываем — иначе при ошибке Gemini придётся заново
-        # писать сообщения всем участникам. Первый, кто нажмёт "Отправить"
-        # ещё раз (после того как ошибка исчезнет), повторно попадёт в
-        # состояние "раунд завершён" и вызовет ИИ снова.
         return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
 
     storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
@@ -238,11 +246,6 @@ def send_message(room_id):
 
 @rooms.route("/<room_id>/retry", methods=["POST"])
 def retry_round(room_id):
-    """
-    Повторить обращение к Gemini для уже завершённого раунда — на случай,
-    если предыдущая попытка упала с ошибкой (429/503/неверный ключ и т.д.),
-    и никому не пришлось бы заново печатать свои сообщения.
-    """
     room = storage.get_room(room_id)
     if not room:
         return jsonify({"error": "Комната не найдена"}), 404
