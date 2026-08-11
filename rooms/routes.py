@@ -279,8 +279,14 @@ def retry_round(room_id):
 
 @rooms.route("/<room_id>/lock", methods=["POST"])
 def lock_room(room_id):
-    locked = request.form.get("locked") == "1"
-    storage.set_locked(room_id, locked)
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    # Автоматически переключаем состояние (если заблокирована — разблокируем, и наоборот)
+    current_locked = room.get("locked", False)
+    storage.set_locked(room_id, not current_locked)
+
     return redirect(url_for("rooms.room_page", room_id=room_id))
 
 
