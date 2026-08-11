@@ -189,6 +189,7 @@
 {% block extra_js %}
 <script>
     const roomId = "{{ room['id'] }}";
+    const myParticipantId = "{{ participant['id'] }}";
     let lastState = null;
 
     async function fetchState() {
@@ -224,15 +225,29 @@
         const input = document.getElementById('msg-input');
         const sendBtn = document.getElementById('send-btn');
 
-        if (data.is_my_turn) {
+        // Определение активного участника
+        const currentParticipant = data.participants.find(p => p.id === data.current_turn);
+        const isMyTurn = data.current_turn && data.current_turn === myParticipantId;
+        const currentTurnName = currentParticipant ? currentParticipant.name : null;
+
+        if (isMyTurn) {
             turnInd.innerText = "Ваш ход!";
             statusBanner.classList.add('d-none');
             input.disabled = false;
             sendBtn.disabled = false;
+        } else if (!data.current_turn) {
+            // Все участники написали, ожидает ответ ИИ
+            turnInd.innerText = "Все ответили. Ждём ИИ...";
+            statusBanner.className = "status-banner bg-info text-white";
+            statusBanner.innerText = "Генерация ответа ИИ...";
+            statusBanner.classList.remove('d-none');
+            input.disabled = true;
+            sendBtn.disabled = true;
         } else {
-            turnInd.innerText = `Ждём ход: ${data.current_turn_name || 'другого игрока'}`;
+            // Ход другого игрока
+            turnInd.innerText = `Ждём ход: ${currentTurnName || 'другого игрока'}`;
             statusBanner.className = "status-banner bg-warning text-dark";
-            statusBanner.innerText = `Сейчас ходит ${data.current_turn_name || 'другой участник'}...`;
+            statusBanner.innerText = `Сейчас ходит ${currentTurnName || 'другой участник'}...`;
             statusBanner.classList.remove('d-none');
             input.disabled = true;
             sendBtn.disabled = true;
@@ -268,7 +283,7 @@
             await fetch(`/rp/${roomId}/message`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: new URLSearchParams({content: text})
+                body: new URLSearchParams({message: text})
             });
             fetchState();
         } catch (err) {
