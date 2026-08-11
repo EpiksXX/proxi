@@ -152,7 +152,7 @@
                 <button class="btn btn-sm btn-outline-custom" onclick="copyInviteLink()" title="Скопировать ссылку">
                     <i class="bi bi-person-plus me-1"></i> Пригласить
                 </button>
-                <form action="/rp/{{ room_id }}/lock" method="POST" class="d-inline">
+                <form action="/rp/{{ room['id'] }}/lock" method="POST" class="d-inline">
                     <button type="submit" class="btn btn-sm btn-outline-custom">
                         <i class="bi bi-lock me-1"></i> {% if room.locked %}Заблокировано{% else %}Заблокировать{% endif %}
                     </button>
@@ -176,7 +176,7 @@
                 </button>
             </form>
 
-            <form id="retry-form" action="/rp/{{ room_id }}/retry" method="POST" class="mt-2 d-none">
+            <form id="retry-form" action="/rp/{{ room['id'] }}/retry" method="POST" class="mt-2 d-none">
                 <button type="submit" class="btn btn-sm btn-outline-warning w-100">
                     <i class="bi bi-arrow-counterclockwise me-1"></i> ИИ задерживается. Повторить генерацию?
                 </button>
@@ -188,7 +188,7 @@
 
 {% block extra_js %}
 <script>
-    const roomId = "{{ room_id }}";
+    const roomId = "{{ room['id'] }}";
     let lastState = null;
 
     async function fetchState() {
