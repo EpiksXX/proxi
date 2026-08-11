@@ -1,39 +1,44 @@
 {% extends "rp_base.html" %}
-{% block title %}Новая RP-комната{% endblock %}
+
+{% block title %}Создать ролевую комнату — Proxi RP{% endblock %}
+
 {% block content %}
-<div class="rp-card">
-    <h1>Новая RP-комната</h1>
-    <p class="text-muted">Создай общий чат — после этого получишь ссылку, которой можно поделиться с друзьями.</p>
+<div class="container py-5 d-flex justify-content-center align-items-center flex-grow-1">
+    <div class="rp-card p-4 p-md-5 w-100" style="max-width: 650px;">
+        <h3 class="fw-bold mb-1">Создание ролевой комнаты</h3>
+        <p class="text-muted mb-4">Задайте характер ИИ и параметры сессии для пошаговой игры.</p>
 
-    <form method="post">
-        <div class="mb-3">
-            <label class="form-label">Имя персонажа</label>
-            <input class="form-control" name="character_name" placeholder="Например: Куро" required>
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label">Системный промпт / персона персонажа</label>
-            <textarea class="form-control" name="system_prompt" rows="6"
-                placeholder="Опиши персонажа, сеттинг и т.д. Можно вставить теги &lt;LOREBOOK=КОД&gt; и &lt;PLUGIN=КОД&gt; из твоей админ-панели — они будут работать и здесь."></textarea>
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label">Gemini API-ключ</label>
-            <input class="form-control" name="api_key" placeholder="Оставь пустым, чтобы использовать ключ из .env сервера (GEMINI_API_KEY)">
-        </div>
-
-        <div class="mb-3 d-flex" style="gap:16px">
-            <div style="max-width:200px">
-                <label class="form-label">Temperature</label>
-                <input class="form-control" name="temperature" type="number" step="0.1" value="1.0">
+        <form action="/rp/new" method="POST" class="d-flex flex-column gap-3">
+            <div>
+                <label class="form-label">Имя ИИ / Персонажа</label>
+                <input type="text" name="character_name" class="form-control" placeholder="Например: Магистр Элион" required>
             </div>
-            <div style="max-width:200px">
-                <label class="form-label">Max tokens</label>
-                <input class="form-control" name="max_tokens" type="number" value="2000">
-            </div>
-        </div>
 
-        <button class="btn btn-primary" type="submit">Создать комнату</button>
-    </form>
+            <div>
+                <label class="form-label">Системный промпт (Характер и правила)</label>
+                <textarea name="system_prompt" class="form-control" rows="4" placeholder="Опишите поведение ИИ, сеттинг игры и его реакцию на действия игроков..." required></textarea>
+            </div>
+
+            <div>
+                <label class="form-label">API Ключ Gemini (Опционально)</label>
+                <input type="password" name="api_key" class="form-control" placeholder="Оставьте пустым для использования ключа сервера">
+            </div>
+
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">Температура (<span id="temp-val">1.0</span>)</label>
+                    <input type="range" name="temperature" class="form-range" min="0" max="2" step="0.1" value="1.0" oninput="document.getElementById('temp-val').innerText = this.value">
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Макс. токенов</label>
+                    <input type="number" name="max_tokens" class="form-control" value="2000">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-purple w-100 mt-3">
+                <i class="bi bi-plus-circle me-2"></i> Создать комнату
+            </button>
+        </form>
+    </div>
 </div>
 {% endblock %}
