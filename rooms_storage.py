@@ -83,6 +83,21 @@ def add_participant(room_id, name, persona=""):
     return room, participant
 
 
+def update_participant(room_id, participant_id, name, persona=""):
+    """Обновляет имя и описание (персону) участника в комнате."""
+    room = get_room(room_id)
+    if not room:
+        return None, None
+    for p in room["participants"]:
+        if p["id"] == participant_id:
+            if name:
+                p["name"] = name
+            p["persona"] = persona
+            _save_room(room)
+            return room, p
+    return room, None
+
+
 def append_message(room_id, role, content, author=""):
     room = get_room(room_id)
     if not room:
