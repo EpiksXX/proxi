@@ -1,8 +1,13 @@
 {% extends "rp_base.html" %}
-{% block title %}Комната не найдена{% endblock %}
+{% block title %}Комната не найдена — Proxi RP{% endblock %}
+
 {% block content %}
-<div class="rp-card">
-    <h1>Комната не найдена</h1>
-    <p class="text-muted">Проверь ссылку — возможно, она устарела или введена с опечаткой.</p>
+<div class="container py-5 d-flex justify-content-center align-items-center flex-grow-1 text-center">
+    <div class="rp-card p-5" style="max-width: 450px;">
+        <div class="fs-1 text-warning mb-2"><i class="bi bi-exclamation-triangle"></i></div>
+        <h4 class="fw-bold mb-2">Комната не найдена</h4>
+        <p class="text-muted mb-4">Запрошенная сессия не существует или была удалена.</p>
+        <a href="/rp/new" class="btn btn-purple w-100">Создать новую комнату</a>
+    </div>
 </div>
 {% endblock %}
