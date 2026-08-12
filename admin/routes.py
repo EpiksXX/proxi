@@ -450,3 +450,25 @@ def _plugin_from_form(form, plugin_id=None):
         "role": form.get("role", "system"),
         "enabled": form.get("enabled") == "on",
     }
+
+# ---------------- Memory / Logs / Settings ----------------
+
+@admin.route("/memory")
+def memory():
+    """Страница управления долгосрочной памятью."""
+    return render_template("memory.html")
+
+
+@admin.route("/logs")
+def logs():
+    """Страница просмотра логов сервера."""
+    return render_template("logs.html")
+
+
+@admin.route("/settings", methods=["GET", "POST"])
+def settings():
+    """Страница глобальных настроек прокси."""
+    if request.method == "POST":
+        # Сохранение настроек
+        pass
+    return render_template("settings.html")
