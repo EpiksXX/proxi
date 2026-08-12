@@ -1,6 +1,6 @@
 import json
 
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 
 from admin import storage
 from admin.lore_engine import source_code
@@ -416,3 +416,31 @@ def _plugin_from_form(form, plugin_id=None):
         "role": form.get("role", "system"),
         "enabled": form.get("enabled") == "on",
     }
+
+@admin.route("/lorebooks", methods=["GET", "POST"])
+def lorebooks_list():
+    if request.method == "POST":
+        # Обработка импорта JSON файла
+        if "file" in request.files:
+            file = request.files["file"]
+            if file and file.filename.endswith(".json"):
+                try:
+                    data = json.load(file)
+                    if hasattr(storage, "import_lorebook"):
+                        storage.import_lorebook(data)
+                except Exception as e:
+                    pass
+            return redirect(url_for("admin.lorebooks_list"))
+
+        # Обработка создания новой записи
+        keywords = request.form.get("keywords", "").strip()
+        content = request.form.get("content", "").strip()
+        if keywords and content:
+            if hasattr(storage, "add_entry"):
+                storage.add_entry(keywords, content)
+
+        return redirect(url_for("admin.lorebooks_list"))
+
+    # Получение списка лорбуков
+    lorebooks = storage.get_lorebooks() if hasattr(storage, "get_lorebooks") else []
+    return render_template("lorebooks.html", lorebooks=lorebooks)
