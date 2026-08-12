@@ -4,9 +4,18 @@
 
 {% block content %}
 <div class="container-fluid p-3">
-    <h4 class="fw-bold mb-3 text-light"><i class="bi bi-file-earmark-text" style="color: var(--accent-purple);"></i> System Logs</h4>
-    <div class="lorebook-card p-4">
-        <pre class="text-light small m-0 font-monospace">Логи сервера пока пустые...</pre>
+    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary-subtle">
+        <h4 class="fw-bold m-0 text-light d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-text-fill" style="color: var(--accent-purple);"></i>
+            <span>Системные логи</span>
+        </h4>
+        <button class="btn btn-sm btn-outline-custom" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Обновить
+        </button>
+    </div>
+
+    <div class="lorebook-card p-3">
+        <pre class="m-0 text-light font-monospace small" style="max-height: 70vh; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">{{ logs }}</pre>
     </div>
 </div>
 {% endblock %}
