@@ -1,4 +1,5 @@
 import json
+import os
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 
@@ -12,6 +13,9 @@ admin = Blueprint(
     static_folder="static",
     url_prefix="/admin"
 )
+
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
+LOG_FILE = os.path.join(os.path.dirname(__file__), "data", "app.log")
 
 
 @admin.route("/")
@@ -451,24 +455,65 @@ def _plugin_from_form(form, plugin_id=None):
         "enabled": form.get("enabled") == "on",
     }
 
+
 # ---------------- Memory / Logs / Settings ----------------
+
+def _get_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "default_api_key": "",
+        "default_model": "gemini-3-flash-preview",
+        "temperature": 1.0,
+        "max_tokens": 2000,
+        "safety_level": "BLOCK_NONE",
+    }
+
+
+def _save_settings(data):
+    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 @admin.route("/memory")
 def memory():
-    """Страница управления долгосрочной памятью."""
-    return render_template("memory.html")
+    """Управление долгосрочной памятью."""
+    memories = storage.list_memories() if hasattr(storage, "list_memories") else []
+    return render_template("memory.html", memories=memories)
 
 
 @admin.route("/logs")
 def logs():
-    """Страница просмотра логов сервера."""
-    return render_template("logs.html")
+    """Просмотр логов сервера."""
+    log_content = "Логи пока отсутствуют."
+    if os.path.exists(LOG_FILE):
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                log_content = "".join(lines[-100:])
+        except Exception as e:
+            log_content = f"Ошибка чтения логов: {e}"
+
+    return render_template("logs.html", logs=log_content)
 
 
 @admin.route("/settings", methods=["GET", "POST"])
 def settings():
-    """Страница глобальных настроек прокси."""
+    """Глобальные настройки прокси."""
     if request.method == "POST":
-        # Сохранение настроек
-        pass
-    return render_template("settings.html")
+        settings_data = {
+            "default_api_key": request.form.get("default_api_key", "").strip(),
+            "default_model": request.form.get("default_model", "gemini-3-flash-preview"),
+            "temperature": float(request.form.get("temperature") or 1.0),
+            "max_tokens": int(request.form.get("max_tokens") or 2000),
+            "safety_level": request.form.get("safety_level", "BLOCK_NONE"),
+        }
+        _save_settings(settings_data)
+        return redirect(url_for("admin.settings", saved=1))
+
+    return render_template("settings.html", settings=_get_settings(), saved=request.args.get("saved"))
