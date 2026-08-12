@@ -152,6 +152,33 @@
             border-radius: 8px;
         }
 
+                /* Фикс полей ввода в модальных окнах */
+        .custom-modal .form-control,
+        .custom-modal input,
+        .custom-modal textarea,
+        .custom-input {
+            background-color: #0f111a !important;
+            color: #f1f5f9 !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        }
+        
+        .custom-modal .form-control:focus,
+        .custom-modal input:focus,
+        .custom-modal textarea:focus,
+        .custom-input:focus {
+            background-color: #0f111a !important;
+            color: #ffffff !important;
+            border-color: var(--accent-purple, #a855f7) !important;
+            box-shadow: 0 0 0 0.25rem rgba(168, 85, 247, 0.25) !important;
+        }
+        
+        .custom-modal .form-control::placeholder,
+        .custom-modal input::placeholder,
+        .custom-modal textarea::placeholder,
+        .custom-input::placeholder {
+            color: #64748b !important;
+            opacity: 1 !important;
+        }
         .btn-purple {
             background: var(--accent-gradient) !important;
             color: #ffffff !important;
