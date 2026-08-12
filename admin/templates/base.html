@@ -94,19 +94,7 @@
             box-shadow: 0 4px 18px rgba(168, 85, 247, 0.35);
         }
 
-        .sidebar-menu .disabled {
-            color: #475569;
-            padding: 10px 16px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            opacity: 0.6;
-            cursor: not-allowed;
-            user-select: none;
-        }
-
-        /* Main Content Area — естественный поток без растягивания */
+        /* Main Content Area — естественный поток без вертикального растягивания */
         .content {
             flex-grow: 1;
             display: block !important;
@@ -152,7 +140,7 @@
             border-radius: 8px;
         }
 
-                /* Фикс полей ввода в модальных окнах */
+        /* Фикс полей ввода в модальных окнах */
         .custom-modal .form-control,
         .custom-modal input,
         .custom-modal textarea,
@@ -179,6 +167,7 @@
             color: #64748b !important;
             opacity: 1 !important;
         }
+
         .btn-purple {
             background: var(--accent-gradient) !important;
             color: #ffffff !important;
@@ -255,9 +244,21 @@
                     <i class="bi bi-puzzle"></i> Plugins
                 </a>
             </li>
-            <li class="disabled"><i class="bi bi-cpu"></i> Memory</li>
-            <li class="disabled"><i class="bi bi-file-earmark-text"></i> Logs</li>
-            <li class="disabled"><i class="bi bi-gear"></i> Settings</li>
+            <li>
+                <a href="{{ url_for('admin.memory') }}" class="{% if request.endpoint == 'admin.memory' %}active{% endif %}">
+                    <i class="bi bi-cpu"></i> Memory
+                </a>
+            </li>
+            <li>
+                <a href="{{ url_for('admin.logs') }}" class="{% if request.endpoint == 'admin.logs' %}active{% endif %}">
+                    <i class="bi bi-file-earmark-text"></i> Logs
+                </a>
+            </li>
+            <li>
+                <a href="{{ url_for('admin.settings') }}" class="{% if request.endpoint == 'admin.settings' %}active{% endif %}">
+                    <i class="bi bi-gear"></i> Settings
+                </a>
+            </li>
         </ul>
     </aside>
 
