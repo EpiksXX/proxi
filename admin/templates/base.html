@@ -111,7 +111,27 @@
             padding: 28px 36px;
             min-width: 0;
         }
+        
+        .content {
+            flex-grow: 1;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+        }
 
+        /* Фикс растягивания кнопок */
+        .content > .container-fluid {
+            height: auto !important;
+        }
+        
+        .content button {
+            height: auto !important;
+            max-height: 38px !important;
+        }
+        
+                
         /* Global UI Elements */
         .lorebook-card {
             background: var(--card-bg) !important;
