@@ -25,8 +25,51 @@ def dashboard():
 
 # ---------------- Lorebooks ----------------
 
-@admin.route("/lorebooks")
+@admin.route("/lorebooks", methods=["GET", "POST"])
 def lorebooks_list():
+    if request.method == "POST":
+        # 1. Обработка импорта JSON файла через модальное окно
+        file = request.files.get("file")
+        if file and file.filename.endswith(".json"):
+            try:
+                raw = file.read().decode("utf-8")
+                data = json.loads(raw)
+                if isinstance(data, dict) and "entries" in data:
+                    source_name = data.get("name") or file.filename
+                    new_entries = _convert_sillytavern_lorebook(data, source_name)
+                elif isinstance(data, list):
+                    source_name = file.filename
+                    new_entries = _convert_own_format_lorebook(data, source_name)
+                else:
+                    new_entries = []
+                
+                for entry in new_entries:
+                    storage.save_lorebook(entry)
+                return redirect(url_for("admin.lorebooks_list", imported=len(new_entries)))
+            except Exception:
+                pass
+
+        # 2. Обработка создания новой записи вручную через модальное окно
+        keywords_raw = request.form.get("keywords", "").strip()
+        content = request.form.get("content", "").strip()
+        if keywords_raw and content:
+            keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()]
+            entry = {
+                "id": None,
+                "name": keywords[0] if keywords else "Новая запись",
+                "keywords": keywords,
+                "content": content,
+                "priority": 0,
+                "case_sensitive": False,
+                "enabled": True,
+                "source": "Добавлено вручную",
+            }
+            storage.save_lorebook(entry)
+            return redirect(url_for("admin.lorebooks_list"))
+
+        return redirect(url_for("admin.lorebooks_list"))
+
+    # GET-запрос: отображение списка лорбуков
     entries = storage.list_lorebooks()
 
     groups_map = {}
@@ -39,6 +82,7 @@ def lorebooks_list():
         group_entries = groups_map[src]
         groups.append({
             "source": src,
+            "name": src,
             "code": source_code(src),
             "entries": group_entries,
             "total": len(group_entries),
@@ -48,6 +92,7 @@ def lorebooks_list():
     return render_template(
         "lorebooks.html",
         groups=groups,
+        lorebooks=groups,
         imported=request.args.get("imported"),
         open_source=request.args.get("open", ""),
     )
@@ -114,8 +159,6 @@ def _convert_sillytavern_lorebook(data, source_name="Импортированн�
     result = []
     for entry in data.get("entries", {}).values():
         enabled = not entry.get("disable", False)
-        # constant=true в SillyTavern значит "вставлять всегда" — у нас это
-        # соответствует пустому списку ключевых слов
         keywords = [] if entry.get("constant") else list(entry.get("key", []))
         name = entry.get("comment") or (keywords[0] if keywords else f"entry-{entry.get('uid', '')}")
         result.append({
@@ -132,13 +175,13 @@ def _convert_sillytavern_lorebook(data, source_name="Импортированн�
 
 
 def _convert_own_format_lorebook(data, source_name="Импортированный лорбук"):
-    """Принимает список записей уже в формате этой панели (например, экспортированный ранее)."""
+    """Принимает список записей уже в формате этой панели."""
     result = []
     for entry in data:
         if not isinstance(entry, dict):
             continue
         result.append({
-            "id": None,  # всегда создаём как новую запись, чтобы не перезатереть существующую по id
+            "id": None,
             "name": entry.get("name", "Без названия"),
             "keywords": entry.get("keywords", []),
             "content": entry.get("content", ""),
@@ -165,8 +208,6 @@ def lorebooks_edit(entry_id):
     existing = storage.get_lorebook(entry_id)
     if request.method == "POST":
         entry = _entry_from_form(request.form, entry_id=entry_id)
-        # сохраняем исходный source (например, название импортированного лорбука),
-        # чтобы редактирование одной записи не выбрасывало её из фильтра/группы
         entry["source"] = existing.get("source", "Добавлено вручную") if existing else "Добавлено вручную"
         storage.save_lorebook(entry)
         return redirect(url_for("admin.lorebooks_list"))
@@ -288,10 +329,7 @@ def plugins_import():
 
 
 def _convert_lorebary_plugin(data, source_name="Импортированный плагин"):
-    """
-    Конвертирует экспорт плагина LoreBary (entries с triggerGroups/actions)
-    в формат этой панели.
-    """
+    """Конвертирует экспорт плагина LoreBary в формат этой панели."""
     result = []
     for entry in data.get("entries", {}).values():
         name = entry.get("name") or entry.get("comment") or f"entry-{entry.get('uid', '')}"
@@ -312,8 +350,6 @@ def _convert_lorebary_plugin(data, source_name="Импортированный �
             trigger = "interval"
             interval = tg.get("messageCountInterval", 0)
             start_after = tg.get("messageCountValue", interval)
-        # неизвестные/прочие типы (chance, variable и т.д.) сводим к "always",
-        # чтобы правило хотя бы не терялось молча
 
         actions = (entry.get("actions") or {}).get("default", [])
         pool = []
@@ -375,8 +411,6 @@ def plugins_edit(plugin_id):
     existing = storage.get_plugin(plugin_id)
     if request.method == "POST":
         plugin = _plugin_from_form(request.form, plugin_id=plugin_id)
-        # сохраняем исходный source (например, название импортированного плагина),
-        # чтобы редактирование одного правила не выбрасывало его из группы/тега
         plugin["source"] = existing.get("source", "Добавлено вручную") if existing else "Добавлено вручную"
         storage.save_plugin(plugin)
         return redirect(url_for("admin.plugins_list"))
@@ -416,31 +450,3 @@ def _plugin_from_form(form, plugin_id=None):
         "role": form.get("role", "system"),
         "enabled": form.get("enabled") == "on",
     }
-
-@admin.route("/lorebooks", methods=["GET", "POST"])
-def lorebooks_list():
-    if request.method == "POST":
-        # Обработка импорта JSON файла
-        if "file" in request.files:
-            file = request.files["file"]
-            if file and file.filename.endswith(".json"):
-                try:
-                    data = json.load(file)
-                    if hasattr(storage, "import_lorebook"):
-                        storage.import_lorebook(data)
-                except Exception as e:
-                    pass
-            return redirect(url_for("admin.lorebooks_list"))
-
-        # Обработка создания новой записи
-        keywords = request.form.get("keywords", "").strip()
-        content = request.form.get("content", "").strip()
-        if keywords and content:
-            if hasattr(storage, "add_entry"):
-                storage.add_entry(keywords, content)
-
-        return redirect(url_for("admin.lorebooks_list"))
-
-    # Получение списка лорбуков
-    lorebooks = storage.get_lorebooks() if hasattr(storage, "get_lorebooks") else []
-    return render_template("lorebooks.html", lorebooks=lorebooks)
