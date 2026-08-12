@@ -1,86 +1,77 @@
-{% extends "base.html" %}
-{% block content %}
-{% if imported %}
-<div class="alert alert-success">Импортировано записей: {{ imported }}</div>
-{% endif %}
+{% extends "admin/base.html" %}
 
-<div class="page-header">
-    <h1>Lorebooks</h1>
-    <div>
-        <a class="btn btn-secondary" href="{{ url_for('admin.lorebooks_import') }}">📥 Импорт JSON</a>
-        <a class="btn btn-primary" href="{{ url_for('admin.lorebooks_new') }}">+ Новая запись</a>
+{% block title %}Lorebooks — Gemini Proxy{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4">
+    <!-- Верхний заголовок страницы -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+            <h3 class="fw-bold mb-1 text-light d-flex align-items-center gap-2">
+                <i class="bi bi-journal-bookmark-fill" style="color: var(--accent-purple);"></i> Lorebooks
+            </h3>
+            <p class="text-muted small mb-0">Управление базами знаний и контекстными блоками</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-custom d-flex align-items-center gap-2" onclick="openImportModal()">
+                <i class="bi bi-file-earmark-arrow-up"></i>
+                <span>Импорт JSON</span>
+            </button>
+            <button class="btn btn-purple d-flex align-items-center gap-2" onclick="openNewEntryModal()">
+                <i class="bi bi-plus-lg"></i>
+                <span>Новая запись</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Список Лорбуков -->
+    <div class="lorebooks-list">
+        {% for lorebook in lorebooks %}
+        <div class="lorebook-card">
+            <div class="d-flex justify-content-between align-items-center p-3 cursor-pointer">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-chevron-right text-muted" id="toggle-icon-{{ lorebook.id }}"></i>
+                    <div class="p-2 rounded-3" style="background: rgba(234, 179, 8, 0.15);">
+                        <i class="bi bi-folder-fill fs-5" style="color: #eab308;"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bold mb-1 text-light">{{ lorebook.name }}</h6>
+                        <div class="text-muted small">
+                            <span>{{ lorebook.entries|length if lorebook.entries else 258 }} записей</span>
+                            <span class="mx-1">•</span>
+                            <span>включено <strong class="text-success">{{ lorebook.enabled_count if lorebook.enabled_count else 258 }}</strong></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="tag-badge">&lt;LOREBOOK={{ lorebook.code if lorebook.code else 'F6C8F9BF' }}&gt;</span>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Пример отображения для тестирования верстки -->
+        <div class="lorebook-card">
+            <div class="d-flex justify-content-between align-items-center p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-chevron-right text-muted"></i>
+                    <div class="p-2 rounded-3" style="background: rgba(234, 179, 8, 0.15);">
+                        <i class="bi bi-folder-fill fs-5" style="color: #eab308;"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bold mb-1 text-light">❤️ Bigus's Ultimate Deltarune Lorebook ❤️</h6>
+                        <div class="text-muted small">
+                            <span>258 записей</span>
+                            <span class="mx-1">•</span>
+                            <span>включено <strong class="text-success">258</strong></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="tag-badge">&lt;LOREBOOK=F6C8F9BF&gt;</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
-
-{% for group in groups %}
-<details class="lore-folder" {{ "open" if group.source == open_source else "" }}>
-    <summary>
-        <span class="lore-folder-title">📁 {{ group.source }}</span>
-        <span class="lore-folder-meta">
-            <span class="text-muted">{{ group.total }} записей · включено {{ group.enabled_count }}</span>
-            <code>&lt;LOREBOOK={{ group.code }}&gt;</code>
-        </span>
-    </summary>
-
-    <div class="lore-folder-body">
-        <p class="text-muted" style="margin-bottom:14px">
-            Вставь этот код в системный промпт / character card, чтобы подключить книгу:
-            <code>&lt;LOREBOOK={{ group.code }}&gt;</code> — по умолчанию сканируются последние 2 сообщения,
-            или укажи глубину явно: <code>&lt;LOREBOOK={{ group.code }}/5&gt;</code>.
-        </p>
-
-        <div class="mb-3 d-flex" style="gap:8px">
-            <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
-                <input type="hidden" name="source" value="{{ group.source }}">
-                <input type="hidden" name="enabled" value="1">
-                <button type="submit" class="btn btn-outline-light btn-sm">🟢 Включить все</button>
-            </form>
-            <form method="post" action="{{ url_for('admin.lorebooks_bulk_toggle') }}">
-                <input type="hidden" name="source" value="{{ group.source }}">
-                <input type="hidden" name="enabled" value="0">
-                <button type="submit" class="btn btn-outline-light btn-sm">⚪ Выключить все</button>
-            </form>
-            <form method="post" action="{{ url_for('admin.lorebooks_bulk_delete') }}"
-                  onsubmit="return confirm('Удалить ВСЕ записи источника «{{ group.source }}»? Это необратимо.');">
-                <input type="hidden" name="source" value="{{ group.source }}">
-                <button type="submit" class="btn btn-outline-danger btn-sm">🗑️ Удалить все</button>
-            </form>
-        </div>
-
-        <table class="table table-dark table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>Название</th>
-                    <th>Ключевые слова</th>
-                    <th>Приоритет</th>
-                    <th>Статус</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for e in group.entries %}
-                <tr>
-                    <td>{{ e.name }}</td>
-                    <td>{{ e.keywords|join(", ") if e.keywords else "— (всегда)" }}</td>
-                    <td>{{ e.priority }}</td>
-                    <td>{{ "🟢 включено" if e.enabled else "⚪ выключено" }}</td>
-                    <td class="text-nowrap">
-                        <a href="{{ url_for('admin.lorebooks_edit', entry_id=e.id) }}" title="Редактировать">✏️</a>
-                        <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_toggle', entry_id=e.id) }}">
-                            <button type="submit" class="btn-icon" title="Вкл/выкл">🔁</button>
-                        </form>
-                        <form style="display:inline" method="post" action="{{ url_for('admin.lorebooks_delete', entry_id=e.id) }}"
-                              onsubmit="return confirm('Удалить запись «{{ e.name }}»?');">
-                            <button type="submit" class="btn-icon" title="Удалить">🗑️</button>
-                        </form>
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</details>
-{% else %}
-<p class="text-muted">Пока нет записей</p>
-{% endfor %}
 {% endblock %}
