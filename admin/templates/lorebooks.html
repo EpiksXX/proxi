@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container-fluid p-3">
-    <!-- Компактная шапка страницы -->
+    <!-- Шапка страницы -->
     <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary-subtle">
         <div class="d-flex align-items-center gap-3">
             <h4 class="fw-bold m-0 text-light d-flex align-items-center gap-2">
@@ -27,13 +27,15 @@
         </div>
     </div>
 
-    <!-- Компактный список лорбуков -->
+    <!-- Список лорбуков -->
     <div class="lorebooks-list">
         {% for lorebook in lorebooks %}
-        <div class="lorebook-card p-2 px-3 mb-2">
-            <div class="d-flex justify-content-between align-items-center">
+        {% set lb_id = lorebook.id if lorebook.id else loop.index %}
+        <div class="lorebook-card mb-2">
+            <!-- Шапка лорбука (Клик раскрывает список записей) -->
+            <div class="p-2 px-3 d-flex justify-content-between align-items-center cursor-pointer" onclick="toggleLorebook('{{ lb_id }}')">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-chevron-right text-muted small"></i>
+                    <i class="bi bi-chevron-right text-muted small" id="toggle-icon-{{ lb_id }}"></i>
                     <i class="bi bi-folder-fill text-warning fs-6"></i>
                     <span class="fw-bold text-light small ms-1">{{ lorebook.name }}</span>
                     <span class="text-muted fs-7 ms-2">
@@ -44,13 +46,29 @@
                     <span class="tag-badge">&lt;LOREBOOK={{ lorebook.code if lorebook.code else 'F6C8F9BF' }}&gt;</span>
                 </div>
             </div>
+
+            <!-- Содержимое лорбука (Записи) -->
+            <div class="p-3 border-top border-secondary-subtle d-none" id="content-{{ lb_id }}">
+                {% if lorebook.entries %}
+                    <div class="d-flex flex-column gap-2">
+                        {% for entry in lorebook.entries %}
+                        <div class="p-2 bg-dark rounded border border-secondary">
+                            <div class="fw-bold text-purple small mb-1">{{ entry.keywords|join(', ') if entry.keywords is iterable and entry.keywords is not string else entry.keywords }}</div>
+                            <div class="text-light small">{{ entry.content }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-muted small text-center py-2">Нажмите «Новая запись» или воспользуйтесь импортом для наполнения.</div>
+                {% endif %}
+            </div>
         </div>
         {% else %}
-        <!-- Пример компактной карточки -->
-        <div class="lorebook-card p-2 px-3 mb-2">
-            <div class="d-flex justify-content-between align-items-center">
+        <!-- Демонстрационная карточка для примера -->
+        <div class="lorebook-card mb-2">
+            <div class="p-2 px-3 d-flex justify-content-between align-items-center cursor-pointer" onclick="toggleLorebook('demo')">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-chevron-right text-muted small"></i>
+                    <i class="bi bi-chevron-right text-muted small" id="toggle-icon-demo"></i>
                     <i class="bi bi-folder-fill text-warning fs-6"></i>
                     <span class="fw-bold text-light small ms-1">❤️ Bigus's Ultimate Deltarune Lorebook ❤️</span>
                     <span class="text-muted fs-7 ms-2">(258 зап. · вкл: <strong class="text-success">258</strong>)</span>
@@ -59,8 +77,102 @@
                     <span class="tag-badge">&lt;LOREBOOK=F6C8F9BF&gt;</span>
                 </div>
             </div>
+            <div class="p-3 border-top border-secondary-subtle d-none" id="content-demo">
+                <div class="text-muted small text-center py-2">Записи лорбука загружены. Кликните для настройки ключевых слов.</div>
+            </div>
         </div>
         {% endfor %}
     </div>
 </div>
+
+<!-- Модальное окно "Импорт JSON" -->
+<div class="custom-modal-overlay d-none" id="importModal">
+    <div class="custom-modal">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 fw-bold text-light">
+                <i class="bi bi-file-earmark-arrow-up me-2" style="color: var(--accent-purple);"></i>Импорт JSON
+            </h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closeImportModal()"></button>
+        </div>
+        <form action="{{ url_for('admin.lorebooks_list') }}" method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="json_file" class="form-label text-light opacity-75">Выберите файл JSON:</label>
+                <input type="file" class="form-control custom-input" id="json_file" name="file" accept=".json" required>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Отмена</button>
+                <button type="submit" class="btn btn-purple">Загрузить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Модальное окно "Новая запись" -->
+<div class="custom-modal-overlay d-none" id="newEntryModal">
+    <div class="custom-modal">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 fw-bold text-light">
+                <i class="bi bi-plus-circle me-2" style="color: var(--accent-purple);"></i>Новая запись
+            </h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closeNewEntryModal()"></button>
+        </div>
+        <form action="{{ url_for('admin.lorebooks_list') }}" method="POST">
+            <div class="mb-3">
+                <label for="entry_key" class="form-label text-light opacity-75">Ключевые слова (через запятую):</label>
+                <input type="text" class="form-control custom-input" id="entry_key" name="keywords" placeholder="Deltarune, Kris, Susie" required>
+            </div>
+            <div class="mb-3">
+                <label for="entry_content" class="form-label text-light opacity-75">Текст записи:</label>
+                <textarea class="form-control custom-input" id="entry_content" name="content" rows="4" placeholder="Описание лора..." required></textarea>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="button" class="btn btn-secondary" onclick="closeNewEntryModal()">Отмена</button>
+                <button type="submit" class="btn btn-purple">Создать</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Функция раскрытия/сворачивания содержимого лорбука
+    function toggleLorebook(id) {
+        const content = document.getElementById('content-' + id);
+        const icon = document.getElementById('toggle-icon-' + id);
+        if (!content) return;
+
+        if (content.classList.contains('d-none')) {
+            content.classList.remove('d-none');
+            if (icon) {
+                icon.classList.remove('bi-chevron-right');
+                icon.classList.add('bi-chevron-down');
+            }
+        } else {
+            content.classList.add('d-none');
+            if (icon) {
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-right');
+            }
+        }
+    }
+
+    // Функции управления модальным окном Импорта JSON
+    function openImportModal() {
+        document.getElementById('importModal').classList.remove('d-none');
+    }
+
+    function closeImportModal() {
+        document.getElementById('importModal').classList.add('d-none');
+    }
+
+    // Функции управления модальным окном Новой записи
+    function openNewEntryModal() {
+        document.getElementById('newEntryModal').classList.remove('d-none');
+    }
+
+    function closeNewEntryModal() {
+        document.getElementById('newEntryModal').classList.add('d-none');
+    }
+</script>
 {% endblock %}
