@@ -2,6 +2,39 @@
 
 {% block title %}Lorebooks — Gemini Proxy{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Стили фиксированных всплывающих модальных окон */
+    .custom-modal-overlay {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: rgba(0, 0, 0, 0.8) !important;
+        backdrop-filter: blur(5px) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 9999 !important;
+    }
+
+    .custom-modal-overlay.d-none {
+        display: none !important;
+    }
+
+    .custom-modal {
+        background: #161926 !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 16px !important;
+        padding: 24px !important;
+        width: 90% !important;
+        max-width: 520px !important;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6) !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid p-3">
     <!-- Шапка страницы -->
@@ -32,14 +65,14 @@
         {% for lorebook in lorebooks %}
         {% set lb_id = lorebook.id if lorebook.id else loop.index %}
         <div class="lorebook-card mb-2">
-            <!-- Шапка лорбука (Клик раскрывает список записей) -->
+            <!-- Шапка лорбука -->
             <div class="p-2 px-3 d-flex justify-content-between align-items-center cursor-pointer" onclick="toggleLorebook('{{ lb_id }}')">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-chevron-right text-muted small" id="toggle-icon-{{ lb_id }}"></i>
                     <i class="bi bi-folder-fill text-warning fs-6"></i>
                     <span class="fw-bold text-light small ms-1">{{ lorebook.name }}</span>
                     <span class="text-muted fs-7 ms-2">
-                        ({{ lorebook.entries|length if lorebook.entries else 258 }} зап. · вкл: <strong class="text-success">{{ lorebook.enabled_count if lorebook.enabled_count else 258 }}</strong>)
+                        ({{ lorebook.entries|length if lorebook.entries else 0 }} зап. · вкл: <strong class="text-success">{{ lorebook.enabled_count if lorebook.enabled_count else 0 }}</strong>)
                     </span>
                 </div>
                 <div>
@@ -47,7 +80,7 @@
                 </div>
             </div>
 
-            <!-- Содержимое лорбука (Записи) -->
+            <!-- Раскрывающийся список записей -->
             <div class="p-3 border-top border-secondary-subtle d-none" id="content-{{ lb_id }}">
                 {% if lorebook.entries %}
                     <div class="d-flex flex-column gap-2">
@@ -59,12 +92,12 @@
                         {% endfor %}
                     </div>
                 {% else %}
-                    <div class="text-muted small text-center py-2">Нажмите «Новая запись» или воспользуйтесь импортом для наполнения.</div>
+                    <div class="text-muted small text-center py-2">В этом лорбуке пока нет записей. Воспользуйтесь импортом или кнопкой «Новая запись».</div>
                 {% endif %}
             </div>
         </div>
         {% else %}
-        <!-- Демонстрационная карточка для примера -->
+        <!-- Демонстрационная карточка -->
         <div class="lorebook-card mb-2">
             <div class="p-2 px-3 d-flex justify-content-between align-items-center cursor-pointer" onclick="toggleLorebook('demo')">
                 <div class="d-flex align-items-center gap-2">
@@ -78,7 +111,10 @@
                 </div>
             </div>
             <div class="p-3 border-top border-secondary-subtle d-none" id="content-demo">
-                <div class="text-muted small text-center py-2">Записи лорбука загружены. Кликните для настройки ключевых слов.</div>
+                <div class="p-2 bg-dark rounded border border-secondary">
+                    <div class="fw-bold text-purple small mb-1">Deltarune, Kris, Susie</div>
+                    <div class="text-light small">Записи лорбука успешно привязаны и используются ИИ в генерациях.</div>
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -136,7 +172,6 @@
 
 {% block extra_js %}
 <script>
-    // Функция раскрытия/сворачивания содержимого лорбука
     function toggleLorebook(id) {
         const content = document.getElementById('content-' + id);
         const icon = document.getElementById('toggle-icon-' + id);
@@ -157,7 +192,6 @@
         }
     }
 
-    // Функции управления модальным окном Импорта JSON
     function openImportModal() {
         document.getElementById('importModal').classList.remove('d-none');
     }
@@ -166,7 +200,6 @@
         document.getElementById('importModal').classList.add('d-none');
     }
 
-    // Функции управления модальным окном Новой записи
     function openNewEntryModal() {
         document.getElementById('newEntryModal').classList.remove('d-none');
     }
