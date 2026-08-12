@@ -34,6 +34,7 @@
 
         .admin-wrapper {
             min-height: 100vh;
+            height: auto !important;
         }
 
         /* Sidebar */
@@ -105,44 +106,27 @@
             user-select: none;
         }
 
-        /* Main Content Area */
+        /* Main Content Area — естественный поток без растягивания */
         .content {
             flex-grow: 1;
-            padding: 28px 36px;
-            min-width: 0;
-        }
-        
-        .content {
-            flex-grow: 1;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
-            justify-content: flex-start;
-        }
-
-        /* Фикс растягивания кнопок */
-        .content > .container-fluid {
-            height: auto !important;
-        }
-        
-        .content button {
-            height: auto !important;
-            max-height: 38px !important;
-        }
-
-        .content {
             display: block !important;
-            height: auto !important;
-            min-height: auto !important;
-            padding: 24px !important;
-        }
-        
-        .container-fluid {
+            padding: 24px 32px !important;
             height: auto !important;
             min-height: 0 !important;
+            min-width: 0;
         }
-                
+
+        .content > .container-fluid,
+        .content .lorebooks-list {
+            height: auto !important;
+            min-height: 0 !important;
+            display: block !important;
+        }
+
+        .content .d-flex {
+            height: auto !important;
+        }
+
         /* Global UI Elements */
         .lorebook-card {
             background: var(--card-bg) !important;
@@ -173,8 +157,10 @@
             color: #ffffff !important;
             border: none !important;
             border-radius: 10px !important;
-            padding: 9px 20px !important;
+            padding: 8px 18px !important;
             font-weight: 600 !important;
+            height: 38px !important;
+            max-height: 38px !important;
             box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3) !important;
             transition: all 0.2s ease !important;
         }
@@ -190,8 +176,10 @@
             color: #e2e8f0 !important;
             border: 1px solid var(--border-color) !important;
             border-radius: 10px !important;
-            padding: 9px 18px !important;
+            padding: 8px 16px !important;
             font-weight: 500 !important;
+            height: 38px !important;
+            max-height: 38px !important;
             transition: all 0.2s ease !important;
         }
 
@@ -211,7 +199,7 @@
                 min-height: auto;
             }
             .content {
-                padding: 16px;
+                padding: 16px !important;
             }
         }
     </style>
