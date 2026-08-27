@@ -352,6 +352,14 @@
         <div class="input-bar-container">
             <div id="status-banner" class="status-banner d-none"></div>
 
+            <!-- Полоса действий активного хода с кнопкой пропуска -->
+            <div id="skip-turn-bar" class="d-none justify-content-between align-items-center mb-2 px-1">
+                <span class="text-success small fw-medium" style="font-size: 0.8rem;"><i class="bi bi-pencil-fill me-1"></i>Ваш ход</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.78rem;" onclick="skipTurn()">
+                    <i class="bi bi-skip-forward-fill me-1"></i>Пропустить ход
+                </button>
+            </div>
+
             <form id="msg-form" onsubmit="sendMessage(event)" class="d-flex gap-2">
                 <textarea id="msg-input" class="form-control custom-input" rows="1" placeholder="Напишите ход... ([действие] скрыто)" required style="resize: none;"></textarea>
                 <button type="submit" id="send-btn" class="btn btn-purple d-flex align-items-center justify-content-center" style="width: 44px; min-width: 44px; height: 38px;">
@@ -385,7 +393,6 @@
                 <small class="text-light opacity-50 mt-1 d-block">Изменения применятся к следующему ответу ИИ без перезапуска комнаты.</small>
             </div>
 
-            <!-- Быстрая вставка доступных тегов -->
             {% if prompts or plugins %}
             <div class="mb-3 p-2 bg-dark rounded border border-secondary">
                 <label class="text-light small fw-bold d-block mb-1">Быстрая вставка тегов:</label>
@@ -594,6 +601,7 @@
         const statusBanner = document.getElementById('status-banner');
         const input = document.getElementById('msg-input');
         const sendBtn = document.getElementById('send-btn');
+        const skipBar = document.getElementById('skip-turn-bar');
 
         const currentParticipant = data.participants.find(p => p.id === data.current_turn);
         const isMyTurn = data.current_turn && data.current_turn === myParticipantId;
@@ -602,6 +610,7 @@
         if (isMyTurn) {
             turnInd.innerText = "Ваш ход!";
             statusBanner.classList.add('d-none');
+            if (skipBar) skipBar.classList.replace('d-none', 'd-flex');
             input.disabled = false;
             sendBtn.disabled = false;
         } else if (!data.current_turn) {
@@ -609,6 +618,7 @@
             statusBanner.className = "status-banner bg-info text-white";
             statusBanner.innerText = "Генерация ответа ИИ...";
             statusBanner.classList.remove('d-none');
+            if (skipBar) skipBar.classList.replace('d-flex', 'd-none');
             input.disabled = true;
             sendBtn.disabled = true;
         } else {
@@ -616,6 +626,7 @@
             statusBanner.className = "status-banner bg-warning text-dark";
             statusBanner.innerText = `Сейчас ходит ${currentTurnName || 'другой участник'}...`;
             statusBanner.classList.remove('d-none');
+            if (skipBar) skipBar.classList.replace('d-flex', 'd-none');
             input.disabled = true;
             sendBtn.disabled = true;
         }
@@ -654,6 +665,16 @@
             fetchState();
         } catch (err) {
             alert("Ошибка отправки сообщения");
+        }
+    }
+
+    async function skipTurn() {
+        if (!confirm("Вы уверены, что хотите пропустить свой ход в этом раунде?")) return;
+        try {
+            await fetch(`/rp/${roomId}/skip`, { method: 'POST' });
+            fetchState();
+        } catch (err) {
+            alert("Ошибка при пропуске хода");
         }
     }
 
