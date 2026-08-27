@@ -1,4 +1,5 @@
 import os
+import re
 
 import requests
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, make_response
@@ -185,11 +186,36 @@ def room_state(room_id):
     if not room:
         return jsonify({"error": "not found"}), 404
 
+    current_p = _current_participant(room)
+    my_id = current_p["id"] if current_p else None
+
+    # Фильтрация скрытых действий [...] от других игроков
+    filtered_messages = []
+    for m in room.get("messages", []):
+        content = m.get("content", "")
+        
+        # Если это сообщение другого игрока — удаляем [текст в скобках]
+        if m.get("role") == "user" and m.get("author_id") and m.get("author_id") != my_id:
+            cleaned = re.sub(r'\[.*?\]', '', content).strip()
+            
+            # Если сообщение состояло ТОЛЬКО из скрытого действия
+            author_name = m.get("author", "Игрок")
+            if not cleaned or cleaned == f"{author_name}:" or cleaned.endswith(":"):
+                cleaned = f"{author_name}: *(совершает скрытое действие)*"
+            
+            filtered_messages.append({
+                **m,
+                "content": cleaned
+            })
+        else:
+            # Свои сообщения и ответы ИИ отдаем без изменений
+            filtered_messages.append(m)
+
     current_turn = _current_turn(room)
 
     return jsonify({
         "character_name": room["character_name"],
-        "messages": room["messages"],
+        "messages": filtered_messages,
         "participants": room["participants"],
         "round_submitted": room.get("round_submitted", []),
         "current_turn": current_turn["id"] if current_turn else None,
@@ -219,7 +245,14 @@ def send_message(room_id):
     if not room.get("api_key"):
         return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
 
-    storage.append_message(room_id, "user", f"{participant['name']}: {text}", author=participant["name"])
+    # Сохраняем сообщение с указанием автора и его ID
+    storage.append_message(
+        room_id, 
+        "user", 
+        f"{participant['name']}: {text}", 
+        author=participant["name"],
+        author_id=participant["id"]
+    )
     room = storage.mark_submitted(room_id, participant["id"])
 
     if len(room["round_submitted"]) < len(room["participants"]):
