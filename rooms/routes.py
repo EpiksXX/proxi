@@ -85,15 +85,35 @@ def _current_turn(room):
 
 def _build_final_system_prompt(room):
     """
-    Собирает системный промпт для запроса к Gemini: сначала прогоняет базовый
-    системный промпт комнаты через движок лорбуков/плагинов (<LOREBOOK=...>,
-    <PLUGIN=...>), добавляет долгосрочную память комнаты, а затем —
-    описания персонажей всех участников.
+    Собирает системный промпт для запроса к Gemini:
+    1. Раскрывает теги <PROMPT=CODE> в полный текст фреймворка.
+    2. Прогоняет через движок лорбуков/плагинов (<LOREBOOK=...>, <PLUGIN=...>).
+    3. Добавляет долгосрочную память комнаты.
+    4. Добавляет описания персонажей всех участников.
     """
-    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
-    system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+    raw_prompt = room["system_prompt"]
 
-    # Автоматически добавляем память комнаты в системный промпт ИИ
+    # 1. Автоматическая замена <PROMPT=CODE> на полный текст промпта
+    try:
+        import admin.routes as admin_routes
+        if hasattr(admin_routes, "_load_prompts"):
+            all_prompts = admin_routes._load_prompts()
+            for p in all_prompts:
+                code = p.get("code") or p.get("id")
+                if code:
+                    tag = f"<PROMPT={code}>"
+                    if tag in raw_prompt:
+                        raw_prompt = raw_prompt.replace(tag, p.get("content", ""))
+                    tag_id = f"<PROMPT={p.get('id')}>"
+                    if tag_id in raw_prompt:
+                        raw_prompt = raw_prompt.replace(tag_id, p.get("content", ""))
+    except Exception:
+        pass
+
+    history_msgs = [_Msg(m["content"]) for m in room["messages"]]
+    system_prompt = build_augmented_system_prompt(raw_prompt, history_msgs)
+
+    # 2. Автоматически добавляем память комнаты в системный промпт ИИ
     if room.get("memories"):
         memory_lines = [f"— {m}" for m in room["memories"] if m]
         if memory_lines:
@@ -103,6 +123,7 @@ def _build_final_system_prompt(room):
                 if system_prompt else f"[Долгосрочная память / Факты]\n{memory_block}"
             )
 
+    # 3. Добавляем персонажей участников
     persona_lines = [
         f"— {p['name']}: {p['persona']}"
         for p in room["participants"]
