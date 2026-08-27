@@ -175,3 +175,12 @@ def delete_room_memory(room_id, index):
         room["memories"].pop(index)
         _save_room(room)
     return room
+
+def update_room_prompt(room_id, system_prompt):
+    """Обновляет системный промпт комнаты на лету."""
+    room = get_room(room_id)
+    if not room:
+        return None
+    room["system_prompt"] = system_prompt
+    _save_room(room)
+    return room
