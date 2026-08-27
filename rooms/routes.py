@@ -87,11 +87,21 @@ def _build_final_system_prompt(room):
     """
     Собирает системный промпт для запроса к Gemini: сначала прогоняет базовый
     системный промпт комнаты через движок лорбуков/плагинов (<LOREBOOK=...>,
-    <PLUGIN=...>), затем добавляет описания персонажей всех участников —
-    чтобы ИИ понимал, кто есть кто в общем чате.
+    <PLUGIN=...>), добавляет долгосрочную память комнаты, а затем —
+    описания персонажей всех участников.
     """
     history_msgs = [_Msg(m["content"]) for m in room["messages"]]
     system_prompt = build_augmented_system_prompt(room["system_prompt"], history_msgs)
+
+    # Автоматически добавляем память комнаты в системный промпт ИИ
+    if room.get("memories"):
+        memory_lines = [f"— {m}" for m in room["memories"] if m]
+        if memory_lines:
+            memory_block = "\n".join(memory_lines)
+            system_prompt = (
+                f"{system_prompt}\n\n[Долгосрочная память / Факты]\n{memory_block}"
+                if system_prompt else f"[Долгосрочная память / Факты]\n{memory_block}"
+            )
 
     persona_lines = [
         f"— {p['name']}: {p['persona']}"
@@ -346,4 +356,20 @@ def update_participant_info(room_id):
 
     storage.update_participant(room_id, participant["id"], name, persona)
 
+    return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
+@rooms.route("/<room_id>/memory", methods=["POST"])
+def add_memory(room_id):
+    """Добавление факта в память комнаты."""
+    memory_text = request.form.get("memory", "").strip()
+    if memory_text:
+        storage.add_room_memory(room_id, memory_text)
+    return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
+@rooms.route("/<room_id>/memory/<int:index>/delete", methods=["POST"])
+def delete_memory(room_id, index):
+    """Удаление факта из памяти комнаты."""
+    storage.delete_room_memory(room_id, index)
     return redirect(url_for("rooms.room_page", room_id=room_id))
