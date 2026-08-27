@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 
@@ -16,6 +17,7 @@ admin = Blueprint(
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
 LOG_FILE = os.path.join(os.path.dirname(__file__), "data", "app.log")
+PROMPTS_FILE = os.path.join(os.path.dirname(__file__), "data", "prompts.json")
 
 
 @admin.route("/")
@@ -454,6 +456,101 @@ def _plugin_from_form(form, plugin_id=None):
         "role": form.get("role", "system"),
         "enabled": form.get("enabled") == "on",
     }
+
+
+# ---------------- Prompts (Промпты и пресеты) ----------------
+
+def _load_prompts():
+    if os.path.exists(PROMPTS_FILE):
+        try:
+            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_prompts(prompts):
+    os.makedirs(os.path.dirname(PROMPTS_FILE), exist_ok=True)
+    with open(PROMPTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(prompts, f, ensure_ascii=False, indent=2)
+
+
+@admin.route("/prompts", methods=["GET", "POST"])
+def prompts_list():
+    prompts = _load_prompts()
+
+    if request.method == "POST":
+        # 1. Импорт JSON файла (поддержка формата модулей LoreBary)
+        file = request.files.get("file")
+        if file and file.filename.endswith(".json"):
+            try:
+                raw = file.read().decode("utf-8")
+                data = json.loads(raw)
+
+                # Если это модульный пресет LoreBary (как SCRF 1.1)
+                if isinstance(data, dict) and "modules" in data:
+                    title = data.get("title") or file.filename
+                    module_texts = []
+                    for mod in data.get("modules", []):
+                        name = mod.get("name", "")
+                        content = mod.get("content", "").strip()
+                        if content:
+                            module_texts.append(f"[{name}]\n{content}")
+                    
+                    full_content = "\n\n".join(module_texts)
+                    prompt_item = {
+                        "id": uuid.uuid4().hex[:8],
+                        "code": source_code(title),
+                        "title": title,
+                        "author": data.get("author", "Не указан"),
+                        "modules_count": len(data.get("modules", [])),
+                        "content": full_content,
+                    }
+                    prompts.append(prompt_item)
+                    _save_prompts(prompts)
+
+                elif isinstance(data, dict):
+                    title = data.get("title") or data.get("name") or file.filename
+                    prompt_item = {
+                        "id": uuid.uuid4().hex[:8],
+                        "code": source_code(title),
+                        "title": title,
+                        "author": data.get("author", "Не указан"),
+                        "modules_count": 1,
+                        "content": data.get("content") or str(data),
+                    }
+                    prompts.append(prompt_item)
+                    _save_prompts(prompts)
+            except Exception:
+                pass
+            return redirect(url_for("admin.prompts_list"))
+
+        # 2. Создание промпта вручную
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+        if title and content:
+            prompt_item = {
+                "id": uuid.uuid4().hex[:8],
+                "code": source_code(title),
+                "title": title,
+                "author": "Вручную",
+                "modules_count": 1,
+                "content": content,
+            }
+            prompts.append(prompt_item)
+            _save_prompts(prompts)
+            return redirect(url_for("admin.prompts_list"))
+
+    return render_template("prompts.html", prompts=prompts)
+
+
+@admin.route("/prompts/<prompt_id>/delete", methods=["POST"])
+def delete_prompt(prompt_id):
+    prompts = _load_prompts()
+    prompts = [p for p in prompts if p.get("id") != prompt_id]
+    _save_prompts(prompts)
+    return redirect(url_for("admin.prompts_list"))
 
 
 # ---------------- Memory / Logs / Settings ----------------
