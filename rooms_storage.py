@@ -98,7 +98,8 @@ def update_participant(room_id, participant_id, name, persona=""):
     return room, None
 
 
-def append_message(room_id, role, content, author=""):
+def append_message(room_id, role, content, author="", author_id=None):
+    """Сохраняет сообщение с указанием автора и его ID."""
     room = get_room(room_id)
     if not room:
         return None
@@ -106,6 +107,7 @@ def append_message(room_id, role, content, author=""):
         "role": role,
         "content": content,
         "author": author,
+        "author_id": author_id,
     }
     room["messages"].append(message)
     _save_room(room)
