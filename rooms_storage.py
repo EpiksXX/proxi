@@ -27,6 +27,7 @@ def create_room(character_name, system_prompt, api_key, temperature=1.0, max_tok
         "max_tokens": max_tokens,
         "participants": [],
         "messages": [],
+        "memories": [],  # Список воспоминаний/фактов комнаты
         "round_submitted": [],
         "locked": False,
     }
@@ -150,4 +151,27 @@ def update_api_key(room_id, api_key):
         return None
     room["api_key"] = api_key
     _save_room(room)
+    return room
+
+
+def add_room_memory(room_id, memory_text):
+    """Добавляет факт в память комнаты."""
+    room = get_room(room_id)
+    if not room:
+        return None
+    if "memories" not in room:
+        room["memories"] = []
+    room["memories"].append(memory_text)
+    _save_room(room)
+    return room
+
+
+def delete_room_memory(room_id, index):
+    """Удаляет факт из памяти комнаты по индексу."""
+    room = get_room(room_id)
+    if not room:
+        return None
+    if "memories" in room and 0 <= index < len(room["memories"]):
+        room["memories"].pop(index)
+        _save_room(room)
     return room
