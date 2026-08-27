@@ -105,6 +105,16 @@
         opacity: 0.95;
     }
 
+    /* Стилизация скрытых действий [действие] */
+    .rp-secret {
+        color: #94a3b8;
+        background: rgba(148, 163, 184, 0.12);
+        border: 1px dashed rgba(148, 163, 184, 0.35);
+        border-radius: 6px;
+        padding: 2px 6px;
+        font-size: 0.88rem;
+    }
+
     .participant-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid var(--border-color);
@@ -288,7 +298,7 @@
             <div id="status-banner" class="status-banner d-none"></div>
 
             <form id="msg-form" onsubmit="sendMessage(event)" class="d-flex gap-2">
-                <textarea id="msg-input" class="form-control" rows="1" placeholder="Напишите ваш ход..." required style="resize: none;"></textarea>
+                <textarea id="msg-input" class="form-control" rows="1" placeholder="Напишите ваш ход... ([действие] скроется от других игроков)" required style="resize: none;"></textarea>
                 <button type="submit" id="send-btn" class="btn btn-purple d-flex align-items-center justify-content-center" style="width: 50px;">
                     <i class="bi bi-send-fill"></i>
                 </button>
@@ -395,9 +405,14 @@
     function formatMessageText(text) {
         if (!text) return '';
         let escaped = escapeHtml(text);
+        
+        // Подсветка скрытых действий [действие] для автора
+        escaped = escaped.replace(/\[(.*?)\]/g, '<span class="rp-secret" title="Скрыто от других игроков">🔒 [$1]</span>');
+        
         // Замена **текст** и *текст* на красивый курсивный элемент .rp-action
         escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<span class="rp-action">$1</span>');
         escaped = escaped.replace(/\*(.*?)\*/g, '<span class="rp-action">$1</span>');
+        
         return escaped;
     }
 
