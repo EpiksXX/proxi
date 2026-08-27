@@ -167,7 +167,7 @@
         font-weight: 500;
     }
 
-    /* Стили автономного модального окна */
+    /* Стили модального окна */
     .custom-modal-overlay {
         position: fixed;
         top: 0;
@@ -187,7 +187,7 @@
         border-radius: 16px;
         padding: 24px;
         width: 90%;
-        max-width: 480px;
+        max-width: 520px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
 
@@ -219,7 +219,7 @@
 
         .chat-header-title {
             font-size: 0.95rem;
-            max-width: 110px;
+            max-width: 100px;
         }
 
         .btn-action-group .btn {
@@ -317,6 +317,9 @@
                 <button class="btn btn-sm btn-outline-custom" onclick="openPersonaModal()" title="Персонаж">
                     <i class="bi bi-person-gear"></i><span class="d-none d-md-inline ms-1">Персонаж</span>
                 </button>
+                <button class="btn btn-sm btn-outline-custom" onclick="openPromptModal()" title="Системный промпт и плагины">
+                    <i class="bi bi-file-earmark-text"></i><span class="d-none d-md-inline ms-1">Промпт</span>
+                </button>
                 <button class="btn btn-sm btn-outline-custom" onclick="openMemoryModal()" title="Память">
                     <i class="bi bi-cpu"></i><span class="d-none d-md-inline ms-1">Память</span>
                 </button>
@@ -363,6 +366,53 @@
             </form>
         </div>
     </section>
+</div>
+
+<!-- Модальное окно изменения системного промпта и плагинов -->
+<div class="custom-modal-overlay d-none" id="promptModal">
+    <div class="custom-modal" style="max-width: 600px;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="m-0 fw-bold text-light">
+                <i class="bi bi-file-earmark-text me-2" style="color: var(--accent-purple);"></i>Промпт и Плагины комнаты
+            </h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePromptModal()"></button>
+        </div>
+        
+        <form action="/rp/{{ room['id'] }}/prompt" method="POST">
+            <div class="mb-3">
+                <label for="room_system_prompt" class="form-label text-light opacity-75">Системный промпт (правила и теги):</label>
+                <textarea class="form-control custom-input" id="room_system_prompt" name="system_prompt" rows="5" placeholder="Инструкции для ИИ, теги <PROMPT=...> или <PLUGIN=...>...">{{ room.system_prompt }}</textarea>
+                <small class="text-light opacity-50 mt-1 d-block">Изменения применятся к следующему ответу ИИ без перезапуска комнаты.</small>
+            </div>
+
+            <!-- Быстрая вставка доступных тегов -->
+            {% if prompts or plugins %}
+            <div class="mb-3 p-2 bg-dark rounded border border-secondary">
+                <label class="text-light small fw-bold d-block mb-1">Быстрая вставка тегов:</label>
+                <div class="d-flex gap-1 flex-wrap" style="max-height: 120px; overflow-y: auto;">
+                    {% for p in prompts %}
+                        <button type="button" class="btn btn-sm btn-outline-custom p-1 px-2 text-nowrap" style="font-size: 0.75rem;" onclick="insertTag('&lt;PROMPT={{ p.code if p.code else p.id }}&gt;')">
+                            + &lt;PROMPT={{ p.code if p.code else p.id }}&gt; ({{ p.title }})
+                        </button>
+                    {% endfor %}
+                    {% for pl in plugins %}
+                        {% set pl_code = pl.code if pl.code else pl.id %}
+                        {% if pl_code %}
+                        <button type="button" class="btn btn-sm btn-outline-custom p-1 px-2 text-nowrap" style="font-size: 0.75rem;" onclick="insertTag('&lt;PLUGIN={{ pl_code }}&gt;')">
+                            + &lt;PLUGIN={{ pl_code }}&gt; ({{ pl.name }})
+                        </button>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
+                <button type="submit" class="btn btn-purple">Сохранить</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Модальное окно изменения информации о персонаже -->
@@ -465,6 +515,20 @@
         sidebar.classList.toggle('mobile-open');
     }
 
+    function openPromptModal() {
+        document.getElementById('promptModal').classList.remove('d-none');
+    }
+
+    function closePromptModal() {
+        document.getElementById('promptModal').classList.add('d-none');
+    }
+
+    function insertTag(tag) {
+        const cleanTag = tag.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        const textarea = document.getElementById('room_system_prompt');
+        textarea.value = (textarea.value.trim() + "\n" + cleanTag).trim();
+    }
+
     function openPersonaModal() {
         document.getElementById('personaModal').classList.remove('d-none');
     }
@@ -504,10 +568,7 @@
         if (!text) return '';
         let escaped = escapeHtml(text);
         
-        // Подсветка скрытых действий [действие] для автора
         escaped = escaped.replace(/\[(.*?)\]/g, '<span class="rp-secret" title="Скрыто от других игроков">🔒 [$1]</span>');
-        
-        // Замена **текст** и *текст* на курсивный элемент .rp-action
         escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<span class="rp-action">$1</span>');
         escaped = escaped.replace(/\*(.*?)\*/g, '<span class="rp-action">$1</span>');
         
@@ -517,7 +578,6 @@
     function renderState(data) {
         lastState = data;
         
-        // Рендер участников
         const pList = document.getElementById('participants-list');
         document.getElementById('participant-count').innerText = data.participants.length;
         pList.innerHTML = data.participants.map(p => {
@@ -530,7 +590,6 @@
             `;
         }).join('');
 
-        // Индикатор ходов
         const turnInd = document.getElementById('turn-indicator');
         const statusBanner = document.getElementById('status-banner');
         const input = document.getElementById('msg-input');
@@ -561,7 +620,6 @@
             sendBtn.disabled = true;
         }
 
-        // Сообщения
         const msgBox = document.getElementById('messages');
         const isAtBottom = msgBox.scrollHeight - msgBox.clientHeight <= msgBox.scrollTop + 50;
 
