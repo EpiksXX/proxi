@@ -21,11 +21,6 @@ VISITOR_COOKIE = "rp_visitor_id"
 
 
 class _Msg:
-    """
-    Лёгкая обёртка вокруг сообщения комнаты — build_augmented_system_prompt
-    (движок лорбуков/плагинов) читает только атрибут .content, поэтому
-    полноценная Pydantic-модель ChatRequest.Message тут не нужна.
-    """
     def __init__(self, content):
         self.content = content
 
@@ -58,15 +53,10 @@ def _call_gemini(system_prompt, contents, api_key, temperature, max_tokens):
 
 
 def _get_cookie_name(room_id):
-    """Формирует уникальное имя Cookie для каждой комнаты."""
     return f"{VISITOR_COOKIE}_{room_id}"
 
 
 def _current_participant(room):
-    """
-    Получает текущего участника.
-    Сначала проверяется Cookie конкретной комнаты, затем общий Cookie.
-    """
     cookie_name = _get_cookie_name(room["id"])
     visitor_id = request.cookies.get(cookie_name) or request.cookies.get(VISITOR_COOKIE)
     if not visitor_id:
@@ -75,25 +65,17 @@ def _current_participant(room):
 
 
 def _current_turn(room):
-    """Первый участник (по порядку присоединения), кто ещё не написал в этом раунде."""
     submitted = set(room.get("round_submitted", []))
     for p in room["participants"]:
         if p["id"] not in submitted:
             return p
-    return None  # все уже написали — раунд обрабатывается / комната без участников
+    return None
 
 
 def _build_final_system_prompt(room):
-    """
-    Собирает системный промпт для запроса к Gemini:
-    1. Раскрывает теги <PROMPT=CODE> в полный текст фреймворка.
-    2. Прогоняет через движок лорбуков/плагинов (<LOREBOOK=...>, <PLUGIN=...>).
-    3. Добавляет долгосрочную память комнаты.
-    4. Добавляет описания персонажей всех участников.
-    """
     raw_prompt = room["system_prompt"]
 
-    # 1. Автоматическая замена <PROMPT=CODE> на полный текст промпта
+    # Автоматическая замена <PROMPT=CODE> на полный текст промпта
     try:
         import admin.routes as admin_routes
         if hasattr(admin_routes, "_load_prompts"):
@@ -113,7 +95,7 @@ def _build_final_system_prompt(room):
     history_msgs = [_Msg(m["content"]) for m in room["messages"]]
     system_prompt = build_augmented_system_prompt(raw_prompt, history_msgs)
 
-    # 2. Автоматически добавляем память комнаты в системный промпт ИИ
+    # Добавляем память комнаты
     if room.get("memories"):
         memory_lines = [f"— {m}" for m in room["memories"] if m]
         if memory_lines:
@@ -123,7 +105,7 @@ def _build_final_system_prompt(room):
                 if system_prompt else f"[Долгосрочная память / Факты]\n{memory_block}"
             )
 
-    # 3. Добавляем персонажей участников
+    # Добавляем персонажей участников
     persona_lines = [
         f"— {p['name']}: {p['persona']}"
         for p in room["participants"]
@@ -164,7 +146,38 @@ def room_page(room_id):
     if not participant:
         return render_template("join_room.html", room=room, error=None)
 
-    return render_template("room.html", room=room, participant=participant)
+    # Загружаем доступные плагины и промпты из админки для быстрого выбора в модальном окне
+    try:
+        from admin.lore_engine import source_code
+        import admin.storage as admin_storage
+        raw_plugins = admin_storage.list_plugins() if hasattr(admin_storage, "list_plugins") else []
+        
+        # Группируем плагины по источникам с генерацией кодов
+        plugins_groups = {}
+        for pl in raw_plugins:
+            src = pl.get("source") or "Без источника"
+            if src not in plugins_groups:
+                plugins_groups[src] = {
+                    "name": src,
+                    "code": source_code(src)
+                }
+        plugins_list = list(plugins_groups.values())
+    except Exception:
+        plugins_list = []
+
+    try:
+        import admin.routes as admin_routes
+        prompts_list = admin_routes._load_prompts() if hasattr(admin_routes, "_load_prompts") else []
+    except Exception:
+        prompts_list = []
+
+    return render_template(
+        "room.html", 
+        room=room, 
+        participant=participant,
+        plugins=plugins_list,
+        prompts=prompts_list
+    )
 
 
 @rooms.route("/<room_id>/join", methods=["POST"])
@@ -191,9 +204,21 @@ def join_room(room_id):
     return resp
 
 
+@rooms.route("/<room_id>/prompt", methods=["POST"])
+def update_room_prompt_route(room_id):
+    """Обновление системного промпта и плагинов комнаты на лету."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    new_prompt = request.form.get("system_prompt", "").strip()
+    storage.update_room_prompt(room_id, new_prompt)
+
+    return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
 @rooms.route("/<room_id>/api_key", methods=["POST"])
 def update_api_key(room_id):
-    """Обновление API-ключа комнаты прямо из чата."""
     room = storage.get_room(room_id)
     if not room:
         return jsonify({"error": "Комната не найдена"}), 404
@@ -206,7 +231,6 @@ def update_api_key(room_id):
 
 @rooms.route("/<room_id>/delete", methods=["POST"])
 def delete_room(room_id):
-    """Удаление комнаты и перенаправление на создание нового чата."""
     storage.delete_room(room_id)
     return redirect(url_for("rooms.new_room"))
 
@@ -220,16 +244,12 @@ def room_state(room_id):
     current_p = _current_participant(room)
     my_id = current_p["id"] if current_p else None
 
-    # Фильтрация скрытых действий [...] от других игроков
     filtered_messages = []
     for m in room.get("messages", []):
         content = m.get("content", "")
         
-        # Если это сообщение другого игрока — удаляем [текст в скобках]
         if m.get("role") == "user" and m.get("author_id") and m.get("author_id") != my_id:
             cleaned = re.sub(r'\[.*?\]', '', content).strip()
-            
-            # Если сообщение состояло ТОЛЬКО из скрытого действия
             author_name = m.get("author", "Игрок")
             if not cleaned or cleaned == f"{author_name}:" or cleaned.endswith(":"):
                 cleaned = f"{author_name}: *(совершает скрытое действие)*"
@@ -239,7 +259,6 @@ def room_state(room_id):
                 "content": cleaned
             })
         else:
-            # Свои сообщения и ответы ИИ отдаем без изменений
             filtered_messages.append(m)
 
     current_turn = _current_turn(room)
@@ -276,7 +295,6 @@ def send_message(room_id):
     if not room.get("api_key"):
         return jsonify({"error": "Для этой комнаты не задан Gemini API-ключ"}), 400
 
-    # Сохраняем сообщение с указанием автора и его ID
     storage.append_message(
         room_id, 
         "user", 
@@ -347,7 +365,6 @@ def lock_room(room_id):
     if not room:
         return jsonify({"error": "Комната не найдена"}), 404
 
-    # Автоматически переключаем состояние (если заблокирована — разблокируем, и наоборот)
     current_locked = room.get("locked", False)
     storage.set_locked(room_id, not current_locked)
 
@@ -356,14 +373,12 @@ def lock_room(room_id):
 
 @rooms.route("/list")
 def list_rooms_page():
-    """Отображает страницу со списком всех созданных комнат."""
     all_rooms = storage.list_rooms()
     return render_template("list_rooms.html", rooms=all_rooms)
 
 
 @rooms.route("/<room_id>/participant", methods=["POST"])
 def update_participant_info(room_id):
-    """Маршрут для обновления информации о персонаже игрока."""
     room = storage.get_room(room_id)
     if not room:
         return jsonify({"error": "Комната не найдена"}), 404
@@ -382,7 +397,6 @@ def update_participant_info(room_id):
 
 @rooms.route("/<room_id>/memory", methods=["POST"])
 def add_memory(room_id):
-    """Добавление факта в память комнаты."""
     memory_text = request.form.get("memory", "").strip()
     if memory_text:
         storage.add_room_memory(room_id, memory_text)
@@ -391,6 +405,5 @@ def add_memory(room_id):
 
 @rooms.route("/<room_id>/memory/<int:index>/delete", methods=["POST"])
 def delete_memory(room_id, index):
-    """Удаление факта из памяти комнаты."""
     storage.delete_room_memory(room_id, index)
     return redirect(url_for("rooms.room_page", room_id=room_id))
