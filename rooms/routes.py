@@ -407,3 +407,52 @@ def add_memory(room_id):
 def delete_memory(room_id, index):
     storage.delete_room_memory(room_id, index)
     return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
+@rooms.route("/<room_id>/skip", methods=["POST"])
+def skip_turn(room_id):
+    """Пропуск хода активного участника."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    participant = _current_participant(room)
+    if not participant:
+        return jsonify({"error": "Сначала присоединись к комнате"}), 403
+
+    current = _current_turn(room)
+    if not current or current["id"] != participant["id"]:
+        name = current["name"] if current else "—"
+        return jsonify({"error": f"Сейчас не ваша очередь (ходит: {name})"}), 403
+
+    # Фиксируем в истории пропуск хода
+    storage.append_message(
+        room_id,
+        "user",
+        f"{participant['name']}: *(пропускает ход)*",
+        author=participant["name"],
+        author_id=participant["id"]
+    )
+    room = storage.mark_submitted(room_id, participant["id"])
+
+    # Если после пропуска все участники ответили — вызываем ИИ
+    if len(room["round_submitted"]) < len(room["participants"]):
+        return jsonify({"ok": True, "round_complete": False})
+
+    system_prompt = _build_final_system_prompt(room)
+    contents = []
+    for m in room["messages"]:
+        role = "model" if m["role"] == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": m["content"]}]})
+
+    try:
+        reply_text = _call_gemini(
+            system_prompt, contents, room["api_key"], room["temperature"], room["max_tokens"]
+        )
+    except Exception as e:
+        return jsonify({"error": f"Ошибка Gemini: {e}"}), 502
+
+    storage.append_message(room_id, "assistant", reply_text, author=room["character_name"])
+    storage.reset_round(room_id)
+
+    return jsonify({"ok": True, "round_complete": True})
