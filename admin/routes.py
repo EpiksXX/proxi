@@ -464,7 +464,16 @@ def _load_prompts():
     if os.path.exists(PROMPTS_FILE):
         try:
             with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                prompts = json.load(f)
+                updated = False
+                for p in prompts:
+                    # Если у промпта ещё нет короткого кода — генерируем его
+                    if not p.get("code"):
+                        p["code"] = source_code(p.get("title", "")) or p.get("id")
+                        updated = True
+                if updated:
+                    _save_prompts(prompts)
+                return prompts
         except Exception:
             pass
     return []
