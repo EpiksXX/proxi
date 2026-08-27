@@ -75,7 +75,7 @@ def _current_turn(room):
 def _build_final_system_prompt(room):
     raw_prompt = room["system_prompt"]
 
-    # Автоматическая замена <PROMPT=CODE> на полный текст промпта
+    # 1. Автоматическая замена <PROMPT=CODE> на полный текст промпта
     try:
         import admin.routes as admin_routes
         if hasattr(admin_routes, "_load_prompts"):
@@ -95,7 +95,7 @@ def _build_final_system_prompt(room):
     history_msgs = [_Msg(m["content"]) for m in room["messages"]]
     system_prompt = build_augmented_system_prompt(raw_prompt, history_msgs)
 
-    # Добавляем память комнаты
+    # 2. Добавляем память комнаты
     if room.get("memories"):
         memory_lines = [f"— {m}" for m in room["memories"] if m]
         if memory_lines:
@@ -105,7 +105,7 @@ def _build_final_system_prompt(room):
                 if system_prompt else f"[Долгосрочная память / Факты]\n{memory_block}"
             )
 
-    # Добавляем персонажей участников
+    # 3. Добавляем персонажей участников
     persona_lines = [
         f"— {p['name']}: {p['persona']}"
         for p in room["participants"]
@@ -117,6 +117,22 @@ def _build_final_system_prompt(room):
             f"{system_prompt}\n\n[Персонажи участников]\n{persona_block}"
             if system_prompt else f"[Персонажи участников]\n{persona_block}"
         )
+
+    # 4. АВТОМАТИЧЕСКИЙ ЗАПРЕТ УПРАВЛЕНИЯ ИГРОКАМИ (Анти-кукловодство)
+    participant_names = [p['name'] for p in room["participants"] if p.get("name")]
+    if participant_names:
+        names_str = ", ".join(participant_names)
+        anti_puppet_rule = (
+            f"\n\n[КРИТИЧЕСКИ ВАЖНОЕ ПРАВИЛО / СТРОЖАЙШИЙ ЗАПРЕТ]\n"
+            f"Персонажи, управляемые ЖИВЫМИ ИГРОКАМИ-ЛЮДЬМИ: {names_str}.\n"
+            f"Тебе КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО:\n"
+            f"1. Писать диалоги, слова или прямую речь от лица: {names_str}.\n"
+            f"2. Совершать действия, передвижения или принимать решения за: {names_str}.\n"
+            f"3. Описывать мысли, чувства или внутренние монологи: {names_str}.\n"
+            f"Ты управляешь ТОЛЬКО окружением, миром, персонажем ИИ ({room['character_name']}) и второстепенными NPC.\n"
+            f"Всегда останавливай генерацию и давай живым игрокам ответить самостоятельно."
+        )
+        system_prompt += anti_puppet_rule
 
     return system_prompt
 
@@ -152,7 +168,6 @@ def room_page(room_id):
         import admin.storage as admin_storage
         raw_plugins = admin_storage.list_plugins() if hasattr(admin_storage, "list_plugins") else []
         
-        # Группируем плагины по источникам с генерацией кодов
         plugins_groups = {}
         for pl in raw_plugins:
             src = pl.get("source") or "Без источника"
@@ -411,7 +426,6 @@ def delete_memory(room_id, index):
 
 @rooms.route("/<room_id>/skip", methods=["POST"])
 def skip_turn(room_id):
-    """Пропуск хода активного участника."""
     room = storage.get_room(room_id)
     if not room:
         return jsonify({"error": "Комната не найдена"}), 404
@@ -425,7 +439,6 @@ def skip_turn(room_id):
         name = current["name"] if current else "—"
         return jsonify({"error": f"Сейчас не ваша очередь (ходит: {name})"}), 403
 
-    # Фиксируем в истории пропуск хода
     storage.append_message(
         room_id,
         "user",
@@ -435,7 +448,6 @@ def skip_turn(room_id):
     )
     room = storage.mark_submitted(room_id, participant["id"])
 
-    # Если после пропуска все участники ответили — вызываем ИИ
     if len(room["round_submitted"]) < len(room["participants"]):
         return jsonify({"ok": True, "round_complete": False})
 
