@@ -105,7 +105,8 @@
         }
 
         .content > .container-fluid,
-        .content .lorebooks-list {
+        .content .lorebooks-list,
+        .content .prompts-list {
             height: auto !important;
             min-height: 0 !important;
             display: block !important;
@@ -242,6 +243,11 @@
             <li>
                 <a href="{{ url_for('admin.plugins_list') }}" class="{% if request.endpoint == 'admin.plugins_list' %}active{% endif %}">
                     <i class="bi bi-puzzle"></i> Plugins
+                </a>
+            </li>
+            <li>
+                <a href="{{ url_for('admin.prompts_list') }}" class="{% if request.endpoint == 'admin.prompts_list' %}active{% endif %}">
+                    <i class="bi bi-card-text"></i> Prompts
                 </a>
             </li>
             <li>
