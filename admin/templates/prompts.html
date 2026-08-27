@@ -23,9 +23,12 @@
         border: 1px solid var(--border-color) !important;
         border-radius: 16px !important;
         padding: 24px !important;
-        width: 90% !important;
+        width: 90%;
         max-width: 550px !important;
         box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6) !important;
+    }
+    .cursor-pointer {
+        cursor: pointer;
     }
 </style>
 {% endblock %}
@@ -61,21 +64,26 @@
         <div class="lorebook-card p-3 mb-2">
             <div class="d-flex justify-content-between align-items-start gap-3">
                 <div class="flex-grow-1">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <i class="bi bi-file-text-fill text-purple"></i>
+                    <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                        <i class="bi bi-file-text-fill text-purple" style="color: var(--accent-purple);"></i>
                         <h6 class="fw-bold text-light m-0">{{ p.title }}</h6>
                         <span class="badge bg-secondary rounded-pill small">{{ p.modules_count }} модулей</span>
+                        
+                        <!-- Кликабельный бейдж с кодом тега <PROMPT=...> -->
+                        <span class="tag-badge cursor-pointer" onclick="copyTag('<PROMPT={{ p.code if p.code else p.id }}>')" title="Нажмите, чтобы скопировать тег">
+                            &lt;PROMPT={{ p.code if p.code else p.id }}&gt;
+                        </span>
                     </div>
                     <p class="text-muted small mb-2">Автор: {{ p.author }}</p>
-                    <div class="p-2 bg-dark rounded border border-secondary text-light small font-monospace" style="max-height: 100px; overflow-y: auto; white-space: pre-wrap;">{{ p.content }}</div>
+                    <div class="p-2 bg-dark rounded border border-secondary text-light small font-monospace" style="max-height: 120px; overflow-y: auto; white-space: pre-wrap;">{{ p.content }}</div>
                 </div>
                 <div class="d-flex flex-column gap-2">
                     <button class="btn btn-sm btn-purple text-nowrap" onclick="copyPrompt('prompt-text-{{ p.id }}')">
-                        <i class="bi bi-clipboard me-1"></i> Скопировать
+                        <i class="bi bi-clipboard me-1"></i> Скопировать текст
                     </button>
                     <textarea id="prompt-text-{{ p.id }}" class="d-none">{{ p.content }}</textarea>
                     <form action="/admin/prompts/{{ p.id }}/delete" method="POST" onsubmit="return confirm('Удалить этот промпт?');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100" title="Удалить">
                             <i class="bi bi-trash"></i>
                         </button>
                     </form>
@@ -97,7 +105,7 @@
 <div class="custom-modal-overlay d-none" id="importModal">
     <div class="custom-modal">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="m-0 fw-bold text-light"><i class="bi bi-file-earmark-arrow-up me-2 text-purple"></i>Импорт промпта LoreBary</h5>
+            <h5 class="m-0 fw-bold text-light"><i class="bi bi-file-earmark-arrow-up me-2" style="color: var(--accent-purple);"></i>Импорт промпта LoreBary</h5>
             <button type="button" class="btn-close btn-close-white" onclick="closeImportModal()"></button>
         </div>
         <form action="/admin/prompts" method="POST" enctype="multipart/form-data">
@@ -117,7 +125,7 @@
 <div class="custom-modal-overlay d-none" id="newPromptModal">
     <div class="custom-modal">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="m-0 fw-bold text-light"><i class="bi bi-plus-circle me-2 text-purple"></i>Новый системный промпт</h5>
+            <h5 class="m-0 fw-bold text-light"><i class="bi bi-plus-circle me-2" style="color: var(--accent-purple);"></i>Новый системный промпт</h5>
             <button type="button" class="btn-close btn-close-white" onclick="closeNewPromptModal()"></button>
         </div>
         <form action="/admin/prompts" method="POST">
@@ -145,10 +153,16 @@
     function openNewPromptModal() { document.getElementById('newPromptModal').classList.remove('d-none'); }
     function closeNewPromptModal() { document.getElementById('newPromptModal').classList.add('d-none'); }
 
+    function copyTag(tagText) {
+        navigator.clipboard.writeText(tagText).then(() => {
+            alert("Тег " + tagText + " скопирован! Вставьте его в системный промпт комнаты при создании.");
+        });
+    }
+
     function copyPrompt(textareaId) {
         const text = document.getElementById(textareaId).value;
         navigator.clipboard.writeText(text).then(() => {
-            alert("Промпт скопирован в буфер обмена! Теперь вы можете вставить его в системный промпт комнаты при создании.");
+            alert("Полный текст промпта скопирован в буфер обмена!");
         });
     }
 </script>
