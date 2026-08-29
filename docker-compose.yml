@@ -32,4 +32,4 @@ services:
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: tunnel --no-autoupdate --url http://gemini-proxy:5000
+    command: tunnel --no-autoupdate --protocol http2 --url http://gemini-proxy:5000
