@@ -26,10 +26,10 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
-  bore:
-    image: ekzhang/bore:latest
+  pinggy:
+    image: alpine
     container_name: gemini-tunnel
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: local 5000 --to bore.pub --port 57365 --local-host gemini-proxy
+    command: sh -c "apk add --no-cache openssh-client && ssh -o StrictHostKeyChecking=no -p 443 -R0:gemini-proxy:5000 a.pinggy.io"
