@@ -26,10 +26,12 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
-  pinggy:
+  tunnel:
     image: alpine
     container_name: gemini-tunnel
     restart: unless-stopped
     depends_on:
       - gemini-proxy
+    volumes:
+      - ./ssh_tunnel:/root/.ssh
     command: sh -c "apk add --no-cache openssh-client && ([ -f /root/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -N '' -f /root/.ssh/id_ed25519) && ssh -o StrictHostKeyChecking=no -R proxis:80:gemini-proxy:5000 localhost.run"
