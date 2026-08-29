@@ -32,4 +32,4 @@ services:
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: sh -c "apk add --no-cache openssh-client && ssh -o StrictHostKeyChecking=no -R 80:gemini-proxy:5000 localhost.run"
+    command: sh -c "apk add --no-cache openssh-client && mkdir -p ~/.ssh && ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519 && ssh -o StrictHostKeyChecking=no -R 80:gemini-proxy:5000 nokey@localhost.run"
