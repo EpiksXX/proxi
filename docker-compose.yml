@@ -32,4 +32,4 @@ services:
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: sh -c "apk add --no-cache openssh-client && ssh -o StrictHostKeyChecking=no -p 443 -R0:gemini-proxy:5000 a.pinggy.io"
+    command: sh -c "apk add --no-cache openssh-client && ssh -o StrictHostKeyChecking=no -R 80:gemini-proxy:5000 localhost.run"
