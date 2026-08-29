@@ -26,10 +26,10 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
-  cloudflared:
-    image: cloudflare/cloudflared:latest
+  bore:
+    image: ekzhang/bore:latest
     container_name: gemini-tunnel
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: tunnel --no-autoupdate --protocol http2 --url http://gemini-proxy:5000
+    command: local 5000 --to bore.pub --local-host gemini-proxy
