@@ -26,16 +26,10 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: gemini-ngrok
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gemini-tunnel
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    env_file:
-      - .env
-    command:
-      - "http"
-      - "gemini-proxy:5000"
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command: tunnel --no-autoupdate --url http://gemini-proxy:5000
