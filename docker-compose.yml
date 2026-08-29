@@ -32,4 +32,4 @@ services:
     restart: unless-stopped
     depends_on:
       - gemini-proxy
-    command: local 5000 --to bore.pub --local-host gemini-proxy
+    command: local 5000 --to bore.pub --port 57365 --local-host gemini-proxy
