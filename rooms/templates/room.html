@@ -151,6 +151,28 @@
         justify-content: space-between;
     }
 
+    /* Кнопка исключения участника */
+    .btn-kick-participant {
+        background: transparent;
+        border: none;
+        color: #ef4444;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        opacity: 0.6;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.2s, background 0.2s, color 0.2s;
+    }
+
+    .btn-kick-participant:hover {
+        opacity: 1;
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+    }
+
     .input-bar-container {
         padding: 10px 16px 14px;
         flex-shrink: 0;
@@ -592,7 +614,12 @@
             return `
                 <div class="participant-card">
                     <span class="fw-medium">${escapeHtml(p.name)}</span>
-                    <span class="fs-6">${submitted ? '✅' : '✍️'}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fs-6">${submitted ? '✅' : '✍️'}</span>
+                        <button type="button" class="btn-kick-participant" title="Исключить игрока" onclick="kickParticipant('${p.id}', '${escapeHtml(p.name)}')">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -646,6 +673,25 @@
 
         if (isAtBottom) {
             msgBox.scrollTop = msgBox.scrollHeight;
+        }
+    }
+
+    async function kickParticipant(participantId, participantName) {
+        if (!confirm(`Вы уверены, что хотите исключить игрока "${participantName}" из сессии?`)) return;
+        try {
+            const res = await fetch(`/rp/${roomId}/participant/${participantId}/delete`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (res.ok) {
+                fetchState();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || 'Не удалось исключить игрока');
+            }
+        } catch (err) {
+            console.error('Ошибка при удалении игрока:', err);
+            alert('Ошибка сети при удалении игрока');
         }
     }
 
