@@ -485,3 +485,14 @@ def skip_turn(room_id):
     storage.reset_round(room_id)
 
     return jsonify({"ok": True, "round_complete": True})
+
+@rooms.route("/<room_id>/stop", methods=["POST"])
+def stop_generation(room_id):
+    """Сбрасывает зависший раунд и возвращает управление игрокам."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    # Очищаем очередь раунда
+    storage.reset_round(room_id)
+    return jsonify({"ok": True, "message": "Генерация сброшена, ход возвращён"})
