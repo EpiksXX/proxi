@@ -637,13 +637,22 @@
         if (isMyTurn) {
             turnInd.innerText = "Ваш ход!";
             statusBanner.classList.add('d-none');
+            statusBanner.innerHTML = '';
             if (skipBar) skipBar.classList.replace('d-none', 'd-flex');
             input.disabled = false;
             sendBtn.disabled = false;
         } else if (!data.current_turn) {
             turnInd.innerText = "Все ответили. Ждём ИИ...";
-            statusBanner.className = "status-banner bg-info text-white";
-            statusBanner.innerText = "Генерация ответа ИИ...";
+            statusBanner.className = "status-banner bg-info text-white d-flex justify-content-between align-items-center py-1 px-3";
+            statusBanner.innerHTML = `
+                <span class="d-flex align-items-center">
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    Генерация ответа ИИ...
+                </span>
+                <button type="button" class="btn btn-sm btn-danger py-0 px-2" style="font-size: 0.78rem;" onclick="stopGeneration()">
+                    <i class="bi bi-stop-circle me-1"></i>Остановить
+                </button>
+            `;
             statusBanner.classList.remove('d-none');
             if (skipBar) skipBar.classList.replace('d-flex', 'd-none');
             input.disabled = true;
@@ -673,6 +682,21 @@
 
         if (isAtBottom) {
             msgBox.scrollTop = msgBox.scrollHeight;
+        }
+    }
+
+    async function stopGeneration() {
+        if (!confirm("Остановить ожидание ответа ИИ и вернуть ход игрокам?")) return;
+        try {
+            const res = await fetch(`/rp/${roomId}/stop`, { method: 'POST' });
+            if (res.ok) {
+                fetchState();
+            } else {
+                alert("Не удалось остановить генерацию");
+            }
+        } catch (err) {
+            console.error("Ошибка остановки:", err);
+            alert("Ошибка сети при остановке генерации");
         }
     }
 
