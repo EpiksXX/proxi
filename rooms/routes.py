@@ -410,6 +410,23 @@ def update_participant_info(room_id):
     return redirect(url_for("rooms.room_page", room_id=room_id))
 
 
+@rooms.route("/<room_id>/participant/<participant_id>/delete", methods=["POST", "DELETE"])
+@rooms.route("/<room_id>/participants/<participant_id>", methods=["POST", "DELETE"])
+def delete_participant(room_id, participant_id):
+    """Удаляет игрока из сессии/комнаты."""
+    room = storage.get_room(room_id)
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+
+    room, success = storage.remove_participant(room_id, participant_id)
+
+    # Если запрос пришел через fetch/AJAX
+    if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.method == "DELETE":
+        return jsonify({"ok": True, "success": success})
+
+    return redirect(url_for("rooms.room_page", room_id=room_id))
+
+
 @rooms.route("/<room_id>/memory", methods=["POST"])
 def add_memory(room_id):
     memory_text = request.form.get("memory", "").strip()
