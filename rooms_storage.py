@@ -99,6 +99,26 @@ def update_participant(room_id, participant_id, name, persona=""):
     return room, None
 
 
+def remove_participant(room_id, participant_id):
+    """Удаляет участника из комнаты и очищает его из round_submitted."""
+    room = get_room(room_id)
+    if not room:
+        return None, False
+
+    initial_len = len(room.get("participants", []))
+    room["participants"] = [
+        p for p in room.get("participants", []) if p.get("id") != participant_id
+    ]
+
+    if len(room["participants"]) < initial_len:
+        if "round_submitted" in room and participant_id in room["round_submitted"]:
+            room["round_submitted"].remove(participant_id)
+        _save_room(room)
+        return room, True
+
+    return room, False
+
+
 def append_message(room_id, role, content, author="", author_id=None):
     """Сохраняет сообщение с указанием автора и его ID."""
     room = get_room(room_id)
@@ -175,6 +195,7 @@ def delete_room_memory(room_id, index):
         room["memories"].pop(index)
         _save_room(room)
     return room
+
 
 def update_room_prompt(room_id, system_prompt):
     """Обновляет системный промпт комнаты на лету."""
