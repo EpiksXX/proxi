@@ -16,7 +16,7 @@ rooms = Blueprint(
     url_prefix="/rp",
 )
 
-MODEL = "gemini-3.1-flash-lite"
+MODEL = "gemini-3-flash-preview"
 VISITOR_COOKIE = "rp_visitor_id"
 
 
