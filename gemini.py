@@ -4,7 +4,7 @@ from schemas import ChatRequest
 from admin.lore_engine import build_augmented_system_prompt
 
 # Всегда используем только эту модель
-MODEL = "gemini-2.5-pro"
+MODEL = "gemini-2.5-flash"
 
 
 def convert_messages(chat: ChatRequest):
